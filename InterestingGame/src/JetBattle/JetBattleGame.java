@@ -172,6 +172,7 @@ public class JetBattleGame {
         private int aiBlueBurstShotsRemaining;
         private int selectedDifficultyIndex = 1;
         private int selectedAircraftIndex = 1;
+        private int selectedAiAircraftIndex = -1;
         private int hangarAircraftIndex = 1;
         private int selectedMenuSection;
         private boolean chinese = true;
@@ -1320,7 +1321,7 @@ public class JetBattleGame {
         private void startBattle(Difficulty selectedDifficulty) {
             difficulty = selectedDifficulty;
             playerAircraft = Aircraft.values()[selectedAircraftIndex];
-            aiAircraft = randomOpponentAircraft(playerAircraft);
+            aiAircraft = selectedAiAircraftIndex >= 0 ? Aircraft.values()[selectedAiAircraftIndex] : randomAiAircraft();
             blue.applyAircraft(playerAircraft);
             red.applyAircraft(aiAircraft);
             red.attack = difficulty.aiAttack;
@@ -1377,13 +1378,9 @@ public class JetBattleGame {
             repaint();
         }
 
-        private Aircraft randomOpponentAircraft(Aircraft playerAircraft) {
+        private Aircraft randomAiAircraft() {
             Aircraft[] aircraft = Aircraft.values();
-            Aircraft selected;
-            do {
-                selected = aircraft[random.nextInt(aircraft.length)];
-            } while (selected == playerAircraft && aircraft.length > 1);
-            return selected;
+            return aircraft[random.nextInt(aircraft.length)];
         }
 
         private void showDifficultySelection() {
@@ -1489,7 +1486,7 @@ public class JetBattleGame {
             int panelX = SETUP_PANEL_X;
             int panelW = SETUP_PANEL_WIDTH;
             int y = 132;
-            y = drawMenuHeader(g, text("选择战机", "Aircraft"), Aircraft.values()[selectedAircraftIndex].displayName(chinese), panelX, y, panelW, selectedMenuSection == 0, aircraftMenuOpen);
+            y = drawMenuHeader(g, text("选择战机", "Aircraft"), setupAircraftSummary(), panelX, y, panelW, selectedMenuSection == 0, aircraftMenuOpen);
             if (aircraftMenuOpen) {
                 y = drawAircraftOptions(g, panelX, y, panelW) + 16;
             }
@@ -1501,7 +1498,7 @@ public class JetBattleGame {
 
             g.setFont(new Font("SansSerif", Font.PLAIN, 17));
             g.setColor(new Color(196, 207, 224));
-            drawCenteredText(g, text("鼠标点击选择，也可用方向键切换，Enter 折叠，Space 开始", "Click to choose, arrows to switch, Enter collapse, Space start"), 588);
+            drawCenteredText(g, text("卡片上半区选 P1，下半区选 AI；AI 不选则随机。Space 开始", "Top half selects P1, bottom half selects AI; no AI pick means random. Space starts"), 588);
 
             g.setColor(new Color(32, 130, 178));
             g.fillRoundRect(START_BUTTON_X, 604, START_BUTTON_WIDTH, 32, 10, 10);
@@ -1522,6 +1519,15 @@ public class JetBattleGame {
             if (settingsOpen) {
                 drawSettingsPanel(g);
             }
+        }
+
+        private String setupAircraftSummary() {
+            Aircraft[] aircraft = Aircraft.values();
+            String playerName = aircraft[selectedAircraftIndex].displayName(chinese);
+            String aiName = selectedAiAircraftIndex >= 0
+                    ? aircraft[selectedAiAircraftIndex].displayName(chinese)
+                    : text("随机", "Random");
+            return "P1 " + playerName + " / AI " + aiName;
         }
 
         private void drawHangar(Graphics2D g) {
@@ -1883,7 +1889,7 @@ public class JetBattleGame {
 
             g.setFont(new Font("SansSerif", Font.PLAIN, 18));
             g.setColor(new Color(202, 214, 232));
-            g.drawString(value, x + width - 160, y + 34);
+            drawClippedString(g, value, x + width - 260, y + 34, 238);
             return y + 66;
         }
 
@@ -1895,21 +1901,40 @@ public class JetBattleGame {
             for (int i = 0; i < aircraft.length; i++) {
                 Aircraft option = aircraft[i];
                 int cardX = startX + i * (cardW + gap);
-                boolean selected = i == selectedAircraftIndex;
+                boolean playerSelected = i == selectedAircraftIndex;
+                boolean aiSelected = i == selectedAiAircraftIndex;
                 g.setColor(new Color(22, 27, 36));
                 g.fillRoundRect(cardX, y, cardW, 110, 10, 10);
-                g.setColor(selected ? option.color : new Color(80, 88, 104));
-                g.setStroke(new BasicStroke(selected ? 3f : 1.4f));
+                g.setColor(playerSelected || aiSelected ? option.color : new Color(80, 88, 104));
+                g.setStroke(new BasicStroke(playerSelected || aiSelected ? 3f : 1.4f));
                 g.drawRoundRect(cardX, y, cardW, 110, 10, 10);
+                if (playerSelected) {
+                    drawRoleBadge(g, "P1", cardX + 10, y + 10, new Color(92, 205, 255));
+                }
+                if (aiSelected) {
+                    drawRoleBadge(g, "AI", cardX + 10, y + (playerSelected ? 38 : 10), new Color(255, 169, 74));
+                }
                 drawFutureJet(g, cardX + 42, y + 55, 0, option.color, "");
                 g.setFont(new Font("SansSerif", Font.BOLD, aircraft.length > 2 ? 16 : 20));
                 g.setColor(Color.WHITE);
                 g.drawString(option.displayName(chinese), cardX + 78, y + 48);
                 g.setFont(new Font("SansSerif", Font.PLAIN, 14));
                 g.setColor(new Color(180, 192, 210));
-                g.drawString(selected ? text("玩家驾驶", "Player") : text("人机可用", "AI pool"), cardX + 78, y + 76);
+                String roleText = playerSelected && aiSelected ? "P1 / AI"
+                        : playerSelected ? "P1"
+                        : aiSelected ? "AI"
+                        : text("可选", "Available");
+                g.drawString(roleText, cardX + 78, y + 76);
             }
             return y + 120;
+        }
+
+        private void drawRoleBadge(Graphics2D g, String label, int x, int y, Color color) {
+            g.setColor(new Color(color.getRed(), color.getGreen(), color.getBlue(), 215));
+            g.fillRoundRect(x, y, 34, 22, 8, 8);
+            g.setColor(Color.WHITE);
+            g.setFont(new Font("SansSerif", Font.BOLD, 12));
+            drawCenteredTextInBox(g, label, x, 34, y + 15);
         }
 
         private int drawDifficultyOptions(Graphics2D g, int x, int y, int width) {
@@ -2564,7 +2589,11 @@ public class JetBattleGame {
                 for (int i = 0; i < aircraft.length; i++) {
                     int cardX = startX + i * (cardW + gap);
                     if (x >= cardX && x <= cardX + cardW) {
-                        selectedAircraftIndex = i;
+                        if (y < 253) {
+                            selectedAircraftIndex = i;
+                        } else {
+                            selectedAiAircraftIndex = selectedAiAircraftIndex == i ? -1 : i;
+                        }
                         selectedMenuSection = 0;
                         repaint();
                         return;
