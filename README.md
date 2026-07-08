@@ -64,6 +64,12 @@ Each game folder has its own bilingual README with more details about gameplay, 
 - [JetBattle README](InterestingGame/src/JetBattle/README.md)
 - [Snake README](InterestingGame/src/Snake/README.md)
 
+## 自定义与建议 / Customization and Ideas
+
+欢迎玩家自行设计新的角色、战机、技能、关卡或玩法机制，并尝试把它们加入到游戏中。也欢迎提出新的想法，例如新的敌人 AI、双人模式、特殊道具、计分系统或更多视觉效果。
+
+Players are welcome to design their own characters, aircraft, skills, levels, or gameplay mechanics and try adding them to the games. New ideas are also welcome, such as improved enemy AI, two-player mode, special items, scoring systems, or more visual effects.
+
 ## 备注 / Notes
 
 - `out/` 和 `.class` 文件是编译输出，不需要提交到 GitHub。

@@ -68,6 +68,16 @@ The settings panel supports language switching, volume adjustment, and key rebin
 
 `Blue Glow` can press `C` to switch between single-shot mode and burst mode. Burst mode fires a fast attack round, but each round has a cooldown and its burst multiplier gradually decreases.
 
+## 自定义战机 / Custom Aircraft
+
+欢迎玩家自行设计新的角色或战机，并将它们加入到游戏中。可以从战机名称、颜色、生命值、攻击力、防御力、速度、普通攻击和技能效果等方面进行设计。
+
+Players are welcome to design their own characters or aircraft and add them to the game. A new aircraft can be designed around its name, color, HP, attack, defense, speed, normal attack, and skill effect.
+
+如果你有新的玩法想法，也可以继续扩展，例如新的 AI 行为、护甲类型、弹药类型、地图机制或本地双人模式。
+
+You can also extend the game with new ideas, such as new AI behavior, armor types, ammo types, arena mechanics, or local two-player mode.
+
 ## 难度 / Difficulty
 
 | 难度 / Difficulty | AI 特点 / AI Behavior |
