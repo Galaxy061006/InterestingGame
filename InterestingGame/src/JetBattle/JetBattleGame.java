@@ -146,6 +146,7 @@ public class JetBattleGame {
         private long nextPlayerAttackTime;
         private long nextPlayerNormalAttackTime;
         private long nextBlueShotTime;
+        private long nextAiBlueShotTime;
         private long blueBurstRoundCooldownUntil;
         private int mouseX = 480;
         private int mouseY = 256;
@@ -168,6 +169,7 @@ public class JetBattleGame {
         private LaserType pendingBlueGlowLaserType = LaserType.NONE;
         private double shieldSpawnTimer;
         private int blueBurstShotsRemaining;
+        private int aiBlueBurstShotsRemaining;
         private int selectedDifficultyIndex = 1;
         private int selectedAircraftIndex = 1;
         private int hangarAircraftIndex = 1;
@@ -244,6 +246,7 @@ public class JetBattleGame {
                 }
                 moveAi(seconds);
                 updatePlayerAutoFire(seconds);
+                updateAiBlueBurstFire();
                 updatePlayerLaser(seconds);
                 updateAiLaser(seconds);
                 updateProjectiles(seconds);
@@ -732,7 +735,7 @@ public class JetBattleGame {
         }
 
         private void aiTurn() {
-            if (choosingDifficulty || paused || gameOver || aiLaserRemaining > 0) {
+            if (choosingDifficulty || paused || gameOver || aiLaserRemaining > 0 || aiBlueBurstShotsRemaining > 0) {
                 return;
             }
 
@@ -750,7 +753,7 @@ public class JetBattleGame {
                         aiBlueBurstMultiplier = BLUE_INITIAL_BURST_MULTIPLIER;
                     }
                     if (aiBlueBurstMode) {
-                        fireAiBlueBurstRound();
+                        queueAiBlueBurstRound();
                         message = fighterDisplayName(red) + " AI used burst laser mode.";
                     } else {
                         pendingBlueGlowChargeMultiplier = 1.0;
@@ -885,15 +888,30 @@ public class JetBattleGame {
             }
         }
 
-        private void fireAiBlueBurstRound() {
-            for (int i = 0; i < BLUE_BURST_SHOTS_PER_ROUND; i++) {
-                pendingBlueGlowChargeMultiplier = BLUE_BURST_CHARGE_MULTIPLIER;
-                pendingBlueGlowAmmoType = AmmoType.LASER;
-                pendingBlueGlowLaserType = LaserType.NON_CONTINUOUS;
-                int damage = blueGlowAttackDamage(red, true, aiBlueBurstMultiplier);
-                fireBlueGlowLasers(red, blue, blue.x, blue.y, damage, text("蓝光", "Blue Glow"));
-                aiBlueBurstMultiplier = Math.max(BLUE_MIN_BURST_MULTIPLIER, aiBlueBurstMultiplier - BLUE_BURST_MULTIPLIER_DROP);
+        private void queueAiBlueBurstRound() {
+            aiBlueBurstShotsRemaining = BLUE_BURST_SHOTS_PER_ROUND;
+            aiBlueBurstMultiplier = BLUE_INITIAL_BURST_MULTIPLIER;
+            nextAiBlueShotTime = 0;
+        }
+
+        private void updateAiBlueBurstFire() {
+            if (aiBlueBurstShotsRemaining <= 0 || aiLaserRemaining > 0) {
+                return;
             }
+
+            long now = System.currentTimeMillis();
+            if (now < nextAiBlueShotTime) {
+                return;
+            }
+
+            pendingBlueGlowChargeMultiplier = BLUE_BURST_CHARGE_MULTIPLIER;
+            pendingBlueGlowAmmoType = AmmoType.LASER;
+            pendingBlueGlowLaserType = LaserType.NON_CONTINUOUS;
+            int damage = blueGlowAttackDamage(red, true, aiBlueBurstMultiplier);
+            fireBlueGlowLasers(red, blue, blue.x, blue.y, damage, text("蓝光", "Blue Glow"));
+            aiBlueBurstMultiplier = Math.max(BLUE_MIN_BURST_MULTIPLIER, aiBlueBurstMultiplier - BLUE_BURST_MULTIPLIER_DROP);
+            aiBlueBurstShotsRemaining--;
+            nextAiBlueShotTime = now + BLUE_FIRE_INTERVAL;
         }
 
         private void updatePlayerLaserWindup(double seconds) {
@@ -1327,6 +1345,8 @@ public class JetBattleGame {
             blueBurstMultiplier = BLUE_INITIAL_BURST_MULTIPLIER;
             aiBlueBurstMultiplier = BLUE_INITIAL_BURST_MULTIPLIER;
             blueBurstShotsRemaining = 0;
+            aiBlueBurstShotsRemaining = 0;
+            nextAiBlueShotTime = 0;
             blueBurstRoundCooldownUntil = 0;
             blueBurstMode = false;
             aiBlueBurstMode = false;
@@ -1383,6 +1403,8 @@ public class JetBattleGame {
             blueBurstMultiplier = BLUE_INITIAL_BURST_MULTIPLIER;
             aiBlueBurstMultiplier = BLUE_INITIAL_BURST_MULTIPLIER;
             blueBurstShotsRemaining = 0;
+            aiBlueBurstShotsRemaining = 0;
+            nextAiBlueShotTime = 0;
             blueBurstRoundCooldownUntil = 0;
             blueBurstMode = false;
             aiBlueBurstMode = false;
