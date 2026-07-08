@@ -158,6 +158,7 @@ public class JetBattleGame {
         private int mouseY = 256;
         private int renderOffsetX;
         private int renderOffsetY;
+        private double renderScale = 1.0;
         private double aiMoveX = 0.8;
         private double aiMoveY = 1.0;
         private double aiBoostDecisionTimer;
@@ -1498,11 +1499,11 @@ public class JetBattleGame {
         }
 
         private int toGameX(MouseEvent event) {
-            return clampInt(event.getX() - renderOffsetX, 0, WIDTH);
+            return clampInt((int) Math.round((event.getX() - renderOffsetX) / renderScale), 0, WIDTH);
         }
 
         private int toGameY(MouseEvent event) {
-            return clampInt(event.getY() - renderOffsetY, 0, HEIGHT);
+            return clampInt((int) Math.round((event.getY() - renderOffsetY) / renderScale), 0, HEIGHT);
         }
 
         private int clampInt(int value, int min, int max) {
@@ -1514,9 +1515,13 @@ public class JetBattleGame {
             super.paintComponent(graphics);
             Graphics2D g = (Graphics2D) graphics.create();
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            renderOffsetX = Math.max(0, (getWidth() - WIDTH) / 2);
-            renderOffsetY = Math.max(0, (getHeight() - HEIGHT) / 2);
+            renderScale = Math.max(0.1, Math.min(getWidth() / (double) WIDTH, getHeight() / (double) HEIGHT));
+            int scaledWidth = (int) Math.round(WIDTH * renderScale);
+            int scaledHeight = (int) Math.round(HEIGHT * renderScale);
+            renderOffsetX = Math.max(0, (getWidth() - scaledWidth) / 2);
+            renderOffsetY = Math.max(0, (getHeight() - scaledHeight) / 2);
             g.translate(renderOffsetX, renderOffsetY);
+            g.scale(renderScale, renderScale);
 
             if (choosingDifficulty) {
                 if (showingHangar) {
@@ -1563,9 +1568,12 @@ public class JetBattleGame {
             frame.setUndecorated(fullScreen);
             frame.setResizable(false);
             if (fullScreen) {
+                setPreferredSize(null);
                 graphicsDevice.setFullScreenWindow(frame);
             } else {
                 graphicsDevice.setFullScreenWindow(null);
+                setPreferredSize(new Dimension(WIDTH, HEIGHT));
+                setSize(new Dimension(WIDTH, HEIGHT));
                 frame.pack();
                 frame.setLocationRelativeTo(null);
             }
