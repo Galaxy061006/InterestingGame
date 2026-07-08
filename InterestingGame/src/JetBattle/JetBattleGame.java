@@ -79,6 +79,18 @@ public class JetBattleGame {
         private static final int SETTINGS_BUTTON_X = WIDTH - 78;
         private static final int SETTINGS_BUTTON_Y = 24;
         private static final int SETTINGS_BUTTON_SIZE = 38;
+        private static final int PAUSE_BUTTON_X = WIDTH - 72;
+        private static final int PAUSE_BUTTON_Y = 26;
+        private static final int PAUSE_BUTTON_SIZE = 42;
+        private static final int PAUSE_MENU_X = 340;
+        private static final int PAUSE_MENU_Y = 230;
+        private static final int PAUSE_MENU_WIDTH = 280;
+        private static final int PAUSE_MENU_HEIGHT = 230;
+        private static final int PAUSE_MENU_BUTTON_X = PAUSE_MENU_X + 42;
+        private static final int PAUSE_MENU_CONTINUE_Y = PAUSE_MENU_Y + 92;
+        private static final int PAUSE_MENU_HOME_Y = PAUSE_MENU_Y + 144;
+        private static final int PAUSE_MENU_BUTTON_WIDTH = 196;
+        private static final int PAUSE_MENU_BUTTON_HEIGHT = 36;
         private static final int INPUT_MOUSE_LEFT = -1;
         private static final int INPUT_MOUSE_MIDDLE = -2;
         private static final int INPUT_MOUSE_RIGHT = -3;
@@ -1534,6 +1546,7 @@ public class JetBattleGame {
             }
 
             drawTitle(g);
+            drawPauseButton(g);
             drawArena(g);
             drawShieldPickups(g);
             drawAimLine(g);
@@ -1563,23 +1576,70 @@ public class JetBattleGame {
         }
 
         private void toggleFullScreen() {
-            fullScreen = !fullScreen;
-            frame.dispose();
-            frame.setUndecorated(fullScreen);
-            frame.setResizable(false);
-            if (fullScreen) {
+            if (!fullScreen) {
+                fullScreen = true;
+                frame.dispose();
+                frame.setUndecorated(true);
+                frame.setResizable(false);
                 setPreferredSize(null);
                 graphicsDevice.setFullScreenWindow(frame);
+                frame.setVisible(true);
             } else {
+                fullScreen = false;
                 graphicsDevice.setFullScreenWindow(null);
+                frame.dispose();
+                frame.setUndecorated(false);
+                frame.setResizable(false);
                 setPreferredSize(new Dimension(WIDTH, HEIGHT));
                 setSize(new Dimension(WIDTH, HEIGHT));
                 frame.pack();
                 frame.setLocationRelativeTo(null);
+                frame.setVisible(true);
             }
-            frame.setVisible(true);
             requestFocusInWindow();
             repaint();
+        }
+
+        private void togglePause() {
+            paused = !paused;
+            pressedKeys.clear();
+            if (paused) {
+                aiTimer.stop();
+                musicTimer.stop();
+                leftMouseDown = false;
+                chargeInputDown = false;
+                blueBurstQueued = false;
+                blueBurstShotsRemaining = 0;
+                blueBurstMultiplier = BLUE_INITIAL_BURST_MULTIPLIER;
+                message = "Paused.";
+            } else {
+                lastUpdateTime = System.nanoTime();
+                message = difficulty.displayName(chinese) + " mode. WASD move, aim with cursor, fire with mouse.";
+                aiTimer.restart();
+                musicTimer.restart();
+            }
+            repaint();
+        }
+
+        private boolean inRect(int x, int y, int rectX, int rectY, int rectW, int rectH) {
+            return x >= rectX && x <= rectX + rectW && y >= rectY && y <= rectY + rectH;
+        }
+
+        private void handlePauseClick(int x, int y) {
+            if (paused) {
+                if (inRect(x, y, PAUSE_MENU_BUTTON_X, PAUSE_MENU_CONTINUE_Y, PAUSE_MENU_BUTTON_WIDTH, PAUSE_MENU_BUTTON_HEIGHT)) {
+                    togglePause();
+                    return;
+                }
+                if (inRect(x, y, PAUSE_MENU_BUTTON_X, PAUSE_MENU_HOME_Y, PAUSE_MENU_BUTTON_WIDTH, PAUSE_MENU_BUTTON_HEIGHT)) {
+                    showDifficultySelection();
+                }
+                return;
+            }
+
+            if (inRect(x, y, PAUSE_BUTTON_X, PAUSE_BUTTON_Y, PAUSE_BUTTON_SIZE, PAUSE_BUTTON_SIZE)) {
+                togglePause();
+            }
         }
 
         private void drawDifficultySelection(Graphics2D g) {
@@ -2130,6 +2190,17 @@ public class JetBattleGame {
             drawCenteredText(g, "Player: WASD move, aim with cursor, mouse fire, P or Space pause, R restart, F11 fullscreen", 76);
         }
 
+        private void drawPauseButton(Graphics2D g) {
+            g.setColor(new Color(28, 34, 46, 230));
+            g.fillRoundRect(PAUSE_BUTTON_X, PAUSE_BUTTON_Y, PAUSE_BUTTON_SIZE, PAUSE_BUTTON_SIZE, 12, 12);
+            g.setColor(new Color(118, 226, 255));
+            g.setStroke(new BasicStroke(1.8f));
+            g.drawRoundRect(PAUSE_BUTTON_X, PAUSE_BUTTON_Y, PAUSE_BUTTON_SIZE, PAUSE_BUTTON_SIZE, 12, 12);
+            g.setColor(Color.WHITE);
+            g.fillRoundRect(PAUSE_BUTTON_X + 13, PAUSE_BUTTON_Y + 10, 6, 22, 3, 3);
+            g.fillRoundRect(PAUSE_BUTTON_X + 24, PAUSE_BUTTON_Y + 10, 6, 22, 3, 3);
+        }
+
         private void drawArena(Graphics2D g) {
             g.setColor(new Color(25, 29, 37));
             g.fillRoundRect(ARENA_LEFT, ARENA_TOP, ARENA_WIDTH, ARENA_HEIGHT, 12, 12);
@@ -2404,26 +2475,29 @@ public class JetBattleGame {
             g.setColor(new Color(0, 0, 0, 145));
             g.fillRect(0, 0, WIDTH, HEIGHT);
 
-            int centerX = WIDTH / 2;
-            int centerY = 244;
-            g.setColor(new Color(90, 210, 255, 45));
-            g.fillOval(centerX - 124, centerY - 124, 248, 248);
+            g.setColor(new Color(18, 24, 34, 238));
+            g.fillRoundRect(PAUSE_MENU_X, PAUSE_MENU_Y, PAUSE_MENU_WIDTH, PAUSE_MENU_HEIGHT, 16, 16);
             g.setColor(new Color(90, 210, 255));
-            g.setStroke(new BasicStroke(3f));
-            g.drawOval(centerX - 96, centerY - 96, 192, 192);
-            g.drawLine(centerX - 150, centerY, centerX - 108, centerY);
-            g.drawLine(centerX + 108, centerY, centerX + 150, centerY);
+            g.setStroke(new BasicStroke(2.4f));
+            g.drawRoundRect(PAUSE_MENU_X, PAUSE_MENU_Y, PAUSE_MENU_WIDTH, PAUSE_MENU_HEIGHT, 16, 16);
 
-            g.fillRoundRect(centerX - 34, centerY - 52, 22, 92, 6, 6);
-            g.fillRoundRect(centerX + 12, centerY - 52, 22, 92, 6, 6);
-
-            g.setFont(new Font("SansSerif", Font.BOLD, 40));
+            g.setFont(new Font("SansSerif", Font.BOLD, 30));
             g.setColor(Color.WHITE);
-            drawCenteredText(g, "PAUSED", centerY + 104);
+            drawCenteredTextInBox(g, text("暂停", "PAUSED"), PAUSE_MENU_X, PAUSE_MENU_WIDTH, PAUSE_MENU_Y + 52);
 
-            g.setFont(new Font("SansSerif", Font.PLAIN, 18));
-            g.setColor(new Color(221, 231, 245));
-            drawCenteredText(g, "Press P or Space to continue", centerY + 136);
+            drawPauseMenuButton(g, PAUSE_MENU_CONTINUE_Y, text("继续游戏", "CONTINUE"));
+            drawPauseMenuButton(g, PAUSE_MENU_HOME_Y, text("返回主界面", "MAIN MENU"));
+        }
+
+        private void drawPauseMenuButton(Graphics2D g, int y, String label) {
+            g.setColor(new Color(35, 48, 65));
+            g.fillRoundRect(PAUSE_MENU_BUTTON_X, y, PAUSE_MENU_BUTTON_WIDTH, PAUSE_MENU_BUTTON_HEIGHT, 10, 10);
+            g.setColor(new Color(118, 226, 255));
+            g.setStroke(new BasicStroke(1.6f));
+            g.drawRoundRect(PAUSE_MENU_BUTTON_X, y, PAUSE_MENU_BUTTON_WIDTH, PAUSE_MENU_BUTTON_HEIGHT, 10, 10);
+            g.setFont(new Font("SansSerif", Font.BOLD, 15));
+            g.setColor(Color.WHITE);
+            drawCenteredTextInBox(g, label, PAUSE_MENU_BUTTON_X, PAUSE_MENU_BUTTON_WIDTH, y + 24);
         }
 
         private void drawExplosion(Graphics2D g) {
@@ -2602,6 +2676,10 @@ public class JetBattleGame {
                 }
                 mouseX = toGameX(event);
                 mouseY = toGameY(event);
+                if (paused || inRect(mouseX, mouseY, PAUSE_BUTTON_X, PAUSE_BUTTON_Y, PAUSE_BUTTON_SIZE, PAUSE_BUTTON_SIZE)) {
+                    handlePauseClick(mouseX, mouseY);
+                    return;
+                }
 
                 boolean consumed = false;
                 if (inputMatchesMouse(keyCharge, event)) {
@@ -2975,24 +3053,7 @@ public class JetBattleGame {
                 }
 
                 if (key == keyPause || key == KeyEvent.VK_SPACE) {
-                    paused = !paused;
-                    pressedKeys.clear();
-                    if (paused) {
-                        aiTimer.stop();
-                        musicTimer.stop();
-                        leftMouseDown = false;
-                        chargeInputDown = false;
-                        blueBurstQueued = false;
-                        blueBurstShotsRemaining = 0;
-                        blueBurstMultiplier = BLUE_INITIAL_BURST_MULTIPLIER;
-                        message = "Paused.";
-                    } else {
-                        lastUpdateTime = System.nanoTime();
-                        message = difficulty.displayName(chinese) + " mode. WASD move, aim with cursor, fire with mouse.";
-                        aiTimer.restart();
-                        musicTimer.restart();
-                    }
-                    repaint();
+                    togglePause();
                     return;
                 }
 
