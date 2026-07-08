@@ -171,10 +171,14 @@ public class JetBattleGame {
         private int blueBurstShotsRemaining;
         private int aiBlueBurstShotsRemaining;
         private int selectedDifficultyIndex = 1;
-        private int selectedAircraftIndex = 1;
+        private int selectedAircraftIndex = -1;
         private int selectedAiAircraftIndex = -1;
         private int hangarAircraftIndex = 1;
         private int selectedMenuSection;
+        private final List<Integer> aircraftConfirmationOrder = new ArrayList<>();
+        private static final int AIRCRAFT_ROLE_PLAYER = 0;
+        private static final int AIRCRAFT_ROLE_AI = 1;
+        private static final long AIRCRAFT_CONFIRM_EFFECT_MS = 720;
         private boolean chinese = true;
         private boolean settingsOpen;
         private int rebindingControlIndex = -1;
@@ -199,6 +203,8 @@ public class JetBattleGame {
         private boolean showingHangar;
         private boolean aircraftMenuOpen = true;
         private boolean difficultyMenuOpen;
+        private boolean playerAircraftConfirmed;
+        private boolean aiAircraftConfirmed;
         private boolean paused;
         private boolean gameOver;
         private boolean playerWon;
@@ -213,6 +219,8 @@ public class JetBattleGame {
         private boolean aiWantsBoost;
         private boolean aiBlueBurstMode;
         private long explosionStartedAt;
+        private long playerAircraftConfirmedAt;
+        private long aiAircraftConfirmedAt;
         private double explosionX;
         private double explosionY;
 
@@ -1320,8 +1328,8 @@ public class JetBattleGame {
 
         private void startBattle(Difficulty selectedDifficulty) {
             difficulty = selectedDifficulty;
-            playerAircraft = Aircraft.values()[selectedAircraftIndex];
-            aiAircraft = selectedAiAircraftIndex >= 0 ? Aircraft.values()[selectedAiAircraftIndex] : randomAiAircraft();
+            playerAircraft = playerAircraftConfirmed ? Aircraft.values()[selectedAircraftIndex] : randomAiAircraft();
+            aiAircraft = aiAircraftConfirmed ? Aircraft.values()[selectedAiAircraftIndex] : randomAiAircraft();
             blue.applyAircraft(playerAircraft);
             red.applyAircraft(aiAircraft);
             red.attack = difficulty.aiAttack;
@@ -1498,7 +1506,7 @@ public class JetBattleGame {
 
             g.setFont(new Font("SansSerif", Font.PLAIN, 17));
             g.setColor(new Color(196, 207, 224));
-            drawCenteredText(g, text("卡片上半区选 P1，下半区选 AI；AI 不选则随机。Space 开始", "Top half selects P1, bottom half selects AI; no AI pick means random. Space starts"), 588);
+            drawCenteredText(g, setupSelectionPrompt(), 588);
 
             g.setColor(new Color(32, 130, 178));
             g.fillRoundRect(START_BUTTON_X, 604, START_BUTTON_WIDTH, 32, 10, 10);
@@ -1523,11 +1531,23 @@ public class JetBattleGame {
 
         private String setupAircraftSummary() {
             Aircraft[] aircraft = Aircraft.values();
-            String playerName = aircraft[selectedAircraftIndex].displayName(chinese);
-            String aiName = selectedAiAircraftIndex >= 0
+            String playerName = playerAircraftConfirmed
+                    ? aircraft[selectedAircraftIndex].displayName(chinese)
+                    : text("随机", "Random");
+            String aiName = aiAircraftConfirmed
                     ? aircraft[selectedAiAircraftIndex].displayName(chinese)
                     : text("随机", "Random");
             return "P1 " + playerName + " / AI " + aiName;
+        }
+
+        private String setupSelectionPrompt() {
+            if (!playerAircraftConfirmed) {
+                return text("选择己方战机。单击预选，再次点击或双击确认。", "Choose P1: click to preview, click again or double-click to confirm.");
+            }
+            if (!aiAircraftConfirmed) {
+                return text("选择敌方战机。未确认则随机，右键撤销确认。", "Choose AI: unconfirmed means random. Right-click to undo.");
+            }
+            return text("战机已确认。右键按确认顺序撤销，Space 开始。", "Confirmed. Right-click undoes last, Space starts.");
         }
 
         private void drawHangar(Graphics2D g) {
@@ -1909,10 +1929,16 @@ public class JetBattleGame {
                 g.setStroke(new BasicStroke(playerSelected || aiSelected ? 3f : 1.4f));
                 g.drawRoundRect(cardX, y, cardW, 110, 10, 10);
                 if (playerSelected) {
-                    drawRoleBadge(g, "P1", cardX + 10, y + 10, new Color(92, 205, 255));
+                    drawRoleBadge(g, "P1", cardX + 10, y + 10, new Color(92, 205, 255), playerAircraftConfirmed);
                 }
                 if (aiSelected) {
-                    drawRoleBadge(g, "AI", cardX + 10, y + (playerSelected ? 38 : 10), new Color(255, 169, 74));
+                    drawRoleBadge(g, "AI", cardX + (playerSelected ? 50 : 10), y + 10, new Color(255, 169, 74), aiAircraftConfirmed);
+                }
+                if (playerSelected && playerAircraftConfirmed) {
+                    drawAircraftConfirmEffect(g, cardX, y, cardW, playerAircraftConfirmedAt, new Color(92, 205, 255));
+                }
+                if (aiSelected && aiAircraftConfirmed) {
+                    drawAircraftConfirmEffect(g, cardX, y, cardW, aiAircraftConfirmedAt, new Color(255, 169, 74));
                 }
                 drawFutureJet(g, cardX + 42, y + 55, 0, option.color, "");
                 g.setFont(new Font("SansSerif", Font.BOLD, aircraft.length > 2 ? 16 : 20));
@@ -1920,21 +1946,39 @@ public class JetBattleGame {
                 g.drawString(option.displayName(chinese), cardX + 78, y + 48);
                 g.setFont(new Font("SansSerif", Font.PLAIN, 14));
                 g.setColor(new Color(180, 192, 210));
-                String roleText = playerSelected && aiSelected ? "P1 / AI"
-                        : playerSelected ? "P1"
-                        : aiSelected ? "AI"
+                String roleText = playerSelected && aiSelected ? aircraftRoleText("P1", playerAircraftConfirmed) + " / " + aircraftRoleText("AI", aiAircraftConfirmed)
+                        : playerSelected ? aircraftRoleText("P1", playerAircraftConfirmed)
+                        : aiSelected ? aircraftRoleText("AI", aiAircraftConfirmed)
                         : text("可选", "Available");
                 g.drawString(roleText, cardX + 78, y + 76);
             }
             return y + 120;
         }
 
-        private void drawRoleBadge(Graphics2D g, String label, int x, int y, Color color) {
-            g.setColor(new Color(color.getRed(), color.getGreen(), color.getBlue(), 215));
+        private String aircraftRoleText(String role, boolean confirmed) {
+            return confirmed ? role : role + "?";
+        }
+
+        private void drawRoleBadge(Graphics2D g, String label, int x, int y, Color color, boolean confirmed) {
+            int alpha = confirmed ? 225 : 110;
+            g.setColor(new Color(color.getRed(), color.getGreen(), color.getBlue(), alpha));
             g.fillRoundRect(x, y, 34, 22, 8, 8);
             g.setColor(Color.WHITE);
             g.setFont(new Font("SansSerif", Font.BOLD, 12));
             drawCenteredTextInBox(g, label, x, 34, y + 15);
+        }
+
+        private void drawAircraftConfirmEffect(Graphics2D g, int x, int y, int width, long confirmedAt, Color color) {
+            long elapsed = System.currentTimeMillis() - confirmedAt;
+            if (elapsed < 0 || elapsed > AIRCRAFT_CONFIRM_EFFECT_MS) {
+                return;
+            }
+            double progress = elapsed / (double) AIRCRAFT_CONFIRM_EFFECT_MS;
+            int expand = 2 + (int) Math.round(progress * 10);
+            int alpha = (int) Math.round(210 * (1.0 - progress));
+            g.setColor(new Color(color.getRed(), color.getGreen(), color.getBlue(), Math.max(0, alpha)));
+            g.setStroke(new BasicStroke(2.8f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            g.drawRoundRect(x - expand, y - expand, width + expand * 2, 110 + expand * 2, 12 + expand, 12 + expand);
         }
 
         private int drawDifficultyOptions(Graphics2D g, int x, int y, int width) {
@@ -2455,7 +2499,7 @@ public class JetBattleGame {
                     return;
                 }
                 if (choosingDifficulty) {
-                    handleSetupClick(event.getX(), event.getY());
+                    handleSetupClick(event.getX(), event.getY(), event.getClickCount(), SwingUtilities.isRightMouseButton(event));
                     return;
                 }
 
@@ -2544,7 +2588,13 @@ public class JetBattleGame {
             audio.setVolume(volume);
         }
 
-        private void handleSetupClick(int x, int y) {
+        private void handleSetupClick(int x, int y, int clickCount, boolean rightClick) {
+            if (rightClick) {
+                undoLastAircraftConfirmation();
+                repaint();
+                return;
+            }
+
             if (x >= SETTINGS_BUTTON_X && x <= SETTINGS_BUTTON_X + SETTINGS_BUTTON_SIZE
                     && y >= SETTINGS_BUTTON_Y && y <= SETTINGS_BUTTON_Y + SETTINGS_BUTTON_SIZE) {
                 settingsOpen = !settingsOpen;
@@ -2589,11 +2639,7 @@ public class JetBattleGame {
                 for (int i = 0; i < aircraft.length; i++) {
                     int cardX = startX + i * (cardW + gap);
                     if (x >= cardX && x <= cardX + cardW) {
-                        if (y < 253) {
-                            selectedAircraftIndex = i;
-                        } else {
-                            selectedAiAircraftIndex = selectedAiAircraftIndex == i ? -1 : i;
-                        }
+                        selectSetupAircraft(i, clickCount >= 2);
                         selectedMenuSection = 0;
                         repaint();
                         return;
@@ -2625,9 +2671,58 @@ public class JetBattleGame {
 
             if (x >= HANGAR_BUTTON_X && x <= HANGAR_BUTTON_X + HANGAR_BUTTON_WIDTH && y >= 646 && y <= 676) {
                 showingHangar = true;
-                hangarAircraftIndex = selectedAircraftIndex;
+                hangarAircraftIndex = selectedAircraftIndex >= 0 ? selectedAircraftIndex : 0;
                 repaint();
             }
+        }
+
+        private void selectSetupAircraft(int aircraftIndex, boolean doubleClick) {
+            if (!playerAircraftConfirmed) {
+                boolean confirm = doubleClick || selectedAircraftIndex == aircraftIndex;
+                selectedAircraftIndex = aircraftIndex;
+                if (confirm) {
+                    confirmSetupAircraft(AIRCRAFT_ROLE_PLAYER);
+                }
+                return;
+            }
+
+            if (!aiAircraftConfirmed) {
+                boolean confirm = doubleClick || selectedAiAircraftIndex == aircraftIndex;
+                selectedAiAircraftIndex = aircraftIndex;
+                if (confirm) {
+                    confirmSetupAircraft(AIRCRAFT_ROLE_AI);
+                }
+            }
+        }
+
+        private void confirmSetupAircraft(int role) {
+            if (role == AIRCRAFT_ROLE_PLAYER && selectedAircraftIndex >= 0 && !playerAircraftConfirmed) {
+                playerAircraftConfirmed = true;
+                playerAircraftConfirmedAt = System.currentTimeMillis();
+                aircraftConfirmationOrder.add(AIRCRAFT_ROLE_PLAYER);
+                playUiSound();
+            } else if (role == AIRCRAFT_ROLE_AI && selectedAiAircraftIndex >= 0 && !aiAircraftConfirmed) {
+                aiAircraftConfirmed = true;
+                aiAircraftConfirmedAt = System.currentTimeMillis();
+                aircraftConfirmationOrder.add(AIRCRAFT_ROLE_AI);
+                playUiSound();
+            }
+        }
+
+        private void undoLastAircraftConfirmation() {
+            if (aircraftConfirmationOrder.isEmpty()) {
+                return;
+            }
+
+            int role = aircraftConfirmationOrder.remove(aircraftConfirmationOrder.size() - 1);
+            if (role == AIRCRAFT_ROLE_AI) {
+                aiAircraftConfirmed = false;
+                aiAircraftConfirmedAt = 0;
+            } else {
+                playerAircraftConfirmed = false;
+                playerAircraftConfirmedAt = 0;
+            }
+            playUiSound();
         }
 
         private void handleHangarClick(int x, int y) {
@@ -2719,14 +2814,14 @@ public class JetBattleGame {
                         repaint();
                     } else if (key == KeyEvent.VK_LEFT || key == KeyEvent.VK_A) {
                         if (selectedMenuSection == 0) {
-                            selectedAircraftIndex = (selectedAircraftIndex - 1 + aircraft.length) % aircraft.length;
+                            selectedAircraftIndex = selectedAircraftIndex < 0 ? 0 : (selectedAircraftIndex - 1 + aircraft.length) % aircraft.length;
                         } else {
                             selectedDifficultyIndex = (selectedDifficultyIndex - 1 + difficulties.length) % difficulties.length;
                         }
                         repaint();
                     } else if (key == KeyEvent.VK_RIGHT || key == KeyEvent.VK_D) {
                         if (selectedMenuSection == 0) {
-                            selectedAircraftIndex = (selectedAircraftIndex + 1) % aircraft.length;
+                            selectedAircraftIndex = selectedAircraftIndex < 0 ? 0 : (selectedAircraftIndex + 1) % aircraft.length;
                         } else {
                             selectedDifficultyIndex = (selectedDifficultyIndex + 1) % difficulties.length;
                         }
