@@ -286,16 +286,19 @@ public class JetBattleGame {
 
             if ((leftMouseDown || blueBurstQueued || blueBurstShotsRemaining > 0) && blueLaserWindupRemaining <= 0 && blueLaserRemaining <= 0) {
                 long now = System.currentTimeMillis();
-                if (blueBurstShotsRemaining == 0 && now >= blueBurstRoundCooldownUntil) {
-                    blueBurstShotsRemaining = BLUE_BURST_SHOTS_PER_ROUND;
-                    blueBurstQueued = false;
-                    blueBurstMultiplier = BLUE_INITIAL_BURST_MULTIPLIER;
-                }
-                if (now >= nextBlueShotTime) {
-                    if (blueBurstShotsRemaining > 0) {
-                        firePlayerBlueGlowLasers(true);
-                        blueBurstShotsRemaining--;
+                if (blueBurstShotsRemaining == 0) {
+                    if (now < blueBurstRoundCooldownUntil) {
+                        return;
                     }
+                    if (leftMouseDown || blueBurstQueued) {
+                        blueBurstShotsRemaining = BLUE_BURST_SHOTS_PER_ROUND;
+                        blueBurstQueued = false;
+                        blueBurstMultiplier = BLUE_INITIAL_BURST_MULTIPLIER;
+                    }
+                }
+                if (blueBurstShotsRemaining > 0 && now >= nextBlueShotTime) {
+                    firePlayerBlueGlowLasers(true);
+                    blueBurstShotsRemaining--;
                     nextBlueShotTime = now + BLUE_FIRE_INTERVAL;
                     if (blueBurstShotsRemaining == 0) {
                         blueBurstRoundCooldownUntil = now + BLUE_BURST_ROUND_COOLDOWN;
