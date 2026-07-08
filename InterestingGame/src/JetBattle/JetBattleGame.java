@@ -52,7 +52,7 @@ public class JetBattleGame {
          * | Aircraft   | ATK | DEF | HP    | Skill multiplier | SPD | Normal attack                  | Skill                                      | Charge efficiency |
          * |------------|-----|-----|-------|------------------|-----|--------------------------------|--------------------------------------------|-------------------|
          * | Tail Flame | 720 | 400 | 18000 | 1.40             | 145 | Missile, ATK - DEF, 700 ms     | 6 missiles, ATK / 6 * skill multiplier    | Base x1.00        |
-         * | Blue Glow  | 960 | 200 | 19000 | 1.25             | 150 | Bullet, ATK * 0.5, 400 ms      | Continuous laser, ATK * 0.7 * skill / sec | Base x1.05        |
+         * | Blue Glow  | 960 | 320 | 19000 | 1.25             | 150 | Bullet, ATK * 0.5, 400 ms      | Continuous laser, ATK * 0.7 * skill / sec | Base x1.05        |
          * | Neutron Star | 700 | 460 | 22000 | 1.50           | 140 | Non-continuous laser orb, ATK - DEF, 600 ms | Slow singularity orb, random final ammo type | Base x1.20 + hit recovery |
          *
          * Standard baseline values for future aircraft:
@@ -2903,7 +2903,7 @@ public class JetBattleGame {
 
     private enum Aircraft {
         RED("Tail Flame", "尾焰", new Color(210, 65, 62), 720, 400, 18000, 1.4, 145),
-        BLUE("Blue Glow", "蓝光", new Color(70, 133, 232), 960, 200, 19000, 1.25, 150),
+        BLUE("Blue Glow", "蓝光", new Color(70, 133, 232), 960, 320, 19000, 1.25, 150),
         NEUTRON_STAR("Neutron Star", "中子星", new Color(150, 85, 225), 700, 460, 22000, 1.5, 140);
 
         private final String name;
