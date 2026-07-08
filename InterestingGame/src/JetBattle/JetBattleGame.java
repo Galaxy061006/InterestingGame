@@ -14,6 +14,8 @@ import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.GraphicsDevice;
+import java.awt.GraphicsEnvironment;
 import java.awt.RadialGradientPaint;
 import java.awt.RenderingHints;
 import java.awt.event.KeyAdapter;
@@ -21,6 +23,7 @@ import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseMotionAdapter;
+import java.awt.geom.QuadCurve2D;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.HashSet;
@@ -38,7 +41,7 @@ public class JetBattleGame {
             JFrame frame = new JFrame("Jet Battle");
             frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
             frame.setResizable(false);
-            frame.add(new BattlePanel());
+            frame.add(new BattlePanel(frame));
             frame.pack();
             frame.setLocationRelativeTo(null);
             frame.setVisible(true);
@@ -52,7 +55,7 @@ public class JetBattleGame {
          * | Aircraft   | ATK | DEF | HP    | Skill multiplier | SPD | Normal attack                  | Skill                                      | Charge efficiency |
          * |------------|-----|-----|-------|------------------|-----|--------------------------------|--------------------------------------------|-------------------|
          * | Tail Flame | 720 | 400 | 18000 | 1.40             | 145 | Missile, ATK - DEF, 700 ms     | 6 missiles, ATK / 6 * skill multiplier    | Base x1.00        |
-         * | Blue Glow  | 960 | 320 | 19000 | 1.55             | 150 | Bullet, ATK * 0.5, 350 ms      | Continuous laser, ATK * 0.7 * skill / sec | Base x1.05        |
+         * | Blue Glow  | 960 | 200 | 19000 | 1.55             | 155 | Bullet, ATK * 0.5, 400 ms      | Continuous laser, ATK * 0.7 * skill / sec | Base x1.05        |
          * | Neutron Star | 700 | 460 | 22000 | 1.50           | 140 | Non-continuous laser orb, ATK - DEF, 600 ms | Slow singularity orb, random final ammo type | Base x1.20 + hit recovery |
          *
          * Standard baseline values for future aircraft:
@@ -84,7 +87,7 @@ public class JetBattleGame {
         private static final int PLAYER_SKILL_COOLDOWN = 280;
         private static final int NORMAL_ATTACK_COOLDOWN = 600;
         private static final int TAIL_FLAME_ATTACK_COOLDOWN = 700;
-        private static final int BLUE_SINGLE_SHOT_COOLDOWN = 350;
+        private static final int BLUE_SINGLE_SHOT_COOLDOWN = 400;
         private static final int BLUE_FIRE_INTERVAL = 140;
         private static final int BLUE_BURST_ROUND_COOLDOWN = 850;
         private static final int BLUE_BURST_SHOTS_PER_ROUND = 4;
@@ -138,6 +141,8 @@ public class JetBattleGame {
         private final Set<Integer> pressedKeys = new HashSet<>();
         private final Random random = new Random();
         private final AudioEngine audio = new AudioEngine();
+        private final JFrame frame;
+        private final GraphicsDevice graphicsDevice = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
         private final Timer gameTimer = new Timer(16, event -> updateGame());
         private final Timer aiTimer = new Timer(AI_ATTACK_INTERVAL, event -> aiTurn());
         private final Timer musicTimer = new Timer(320, event -> playBattleMusicNote());
@@ -151,6 +156,8 @@ public class JetBattleGame {
         private long aiBlueBurstRoundCooldownUntil;
         private int mouseX = 480;
         private int mouseY = 256;
+        private int renderOffsetX;
+        private int renderOffsetY;
         private double aiMoveX = 0.8;
         private double aiMoveY = 1.0;
         private double aiBoostDecisionTimer;
@@ -193,6 +200,7 @@ public class JetBattleGame {
         private int keyPause = KeyEvent.VK_P;
         private int keyRestart = KeyEvent.VK_R;
         private int keyBlueMode = KeyEvent.VK_C;
+        private int keyFullScreen = KeyEvent.VK_F11;
         private int keyAttack = INPUT_MOUSE_LEFT;
         private int keyCharge = INPUT_MOUSE_LEFT;
         private int keyInputMethodLock = KeyEvent.VK_F12;
@@ -219,13 +227,15 @@ public class JetBattleGame {
         private boolean blueBurstMode;
         private boolean aiWantsBoost;
         private boolean aiBlueBurstMode;
+        private boolean fullScreen;
         private long explosionStartedAt;
         private long playerAircraftConfirmedAt;
         private long aiAircraftConfirmedAt;
         private double explosionX;
         private double explosionY;
 
-        BattlePanel() {
+        BattlePanel(JFrame frame) {
+            this.frame = frame;
             setPreferredSize(new Dimension(WIDTH, HEIGHT));
             setBackground(new Color(18, 20, 26));
             setFocusable(true);
@@ -983,8 +993,8 @@ public class JetBattleGame {
             }
 
             blueLaserRemaining = Math.max(0, blueLaserRemaining - seconds);
-            Point2D aim = neutronDeflectedLaserAim(blue, mouseX, mouseY);
-            if (laserHitsTarget(blue, red, aim.x, aim.y)) {
+            LaserPath path = laserPath(blue, mouseX, mouseY);
+            if (laserHitsTarget(path, red)) {
                 addContinuousLaserDefenderCharge(red, seconds);
                 double damagePerSecond = blue.attack * 0.7 * blue.skillBonus;
                 blueLaserDamageCarry += damagePerSecond * seconds;
@@ -1004,8 +1014,8 @@ public class JetBattleGame {
             }
 
             aiLaserRemaining = Math.max(0, aiLaserRemaining - seconds);
-            Point2D aim = neutronDeflectedLaserAim(red, blue.x, blue.y);
-            if (laserHitsTarget(red, blue, aim.x, aim.y)) {
+            LaserPath path = laserPath(red, blue.x, blue.y);
+            if (laserHitsTarget(path, blue)) {
                 addContinuousLaserDefenderCharge(blue, seconds);
                 double damagePerSecond = red.attack * 0.7 * red.skillBonus;
                 aiLaserDamageCarry += damagePerSecond * seconds;
@@ -1019,16 +1029,21 @@ public class JetBattleGame {
             }
         }
 
-        private Point2D neutronDeflectedLaserAim(Fighter shooter, double aimX, double aimY) {
+        private LaserPath laserPath(Fighter shooter, double aimX, double aimY) {
             double dx = aimX - shooter.x;
             double dy = aimY - shooter.y;
             double length = Math.hypot(dx, dy);
             if (length == 0) {
-                return new Point2D(aimX, aimY);
+                dx = shooter == blue ? -1 : 1;
+                dy = 0;
+                length = 1;
             }
 
             double nx = dx / length;
             double ny = dy / length;
+            double directDistance = laserDistanceToArenaEdge(shooter.x, shooter.y, nx, ny);
+            double directEndX = shooter.x + nx * directDistance;
+            double directEndY = shooter.y + ny * directDistance;
             for (Projectile orb : projectiles) {
                 if (!orb.neutronSkillOrb || orb.fromBlue == (shooter == blue)) {
                     continue;
@@ -1042,43 +1057,79 @@ public class JetBattleGame {
                 double closestX = shooter.x + nx * projection;
                 double closestY = shooter.y + ny * projection;
                 double distance = Math.hypot(orb.x - closestX, orb.y - closestY);
-                if (distance > NEUTRON_ORB_DEFLECT_RADIUS) {
+                if (distance > NEUTRON_ORB_DEFLECT_RADIUS || projection > directDistance) {
                     continue;
                 }
 
                 double pullLength = Math.hypot(orbDx, orbDy);
+                if (pullLength == 0) {
+                    continue;
+                }
                 double pullX = orbDx / pullLength;
                 double pullY = orbDy / pullLength;
                 double influence = (1.0 - distance / NEUTRON_ORB_DEFLECT_RADIUS) * 0.62;
                 double newX = nx + (pullX - nx) * influence;
                 double newY = ny + (pullY - ny) * influence;
                 double newLength = Math.hypot(newX, newY);
-                return new Point2D(shooter.x + newX / newLength * ARENA_WIDTH, shooter.y + newY / newLength * ARENA_WIDTH);
+                if (newLength == 0) {
+                    continue;
+                }
+                double deflectX = newX / newLength;
+                double deflectY = newY / newLength;
+                double deflectDistance = laserDistanceToArenaEdge(closestX, closestY, deflectX, deflectY);
+                double endX = closestX + deflectX * deflectDistance;
+                double endY = closestY + deflectY * deflectDistance;
+                double sideX = -ny;
+                double sideY = nx;
+                double bendSign = Math.signum((orb.x - closestX) * sideX + (orb.y - closestY) * sideY);
+                if (bendSign == 0) {
+                    bendSign = 1;
+                }
+                double bend = 52 * influence * bendSign;
+                double controlDistance = Math.min(180, Math.max(60, deflectDistance * 0.35));
+                double controlX = closestX + (nx + deflectX) * 0.5 * controlDistance + sideX * bend;
+                double controlY = closestY + (ny + deflectY) * 0.5 * controlDistance + sideY * bend;
+                return new LaserPath(shooter.x, shooter.y, closestX, closestY, controlX, controlY, endX, endY, true);
             }
 
-            return new Point2D(aimX, aimY);
+            return new LaserPath(shooter.x, shooter.y, directEndX, directEndY, directEndX, directEndY, directEndX, directEndY, false);
         }
 
-        private boolean laserHitsTarget(Fighter shooter, Fighter target, double aimX, double aimY) {
-            double dx = aimX - shooter.x;
-            double dy = aimY - shooter.y;
-            double length = Math.hypot(dx, dy);
-            if (length == 0) {
+        private boolean laserHitsTarget(LaserPath path, Fighter target) {
+            if (distanceToSegment(target.x, target.y, path.startX, path.startY, path.pivotX, path.pivotY) <= BLUE_LASER_HIT_RADIUS) {
+                return true;
+            }
+            if (!path.deflected) {
                 return false;
             }
 
-            double nx = dx / length;
-            double ny = dy / length;
-            double targetDx = target.x - shooter.x;
-            double targetDy = target.y - shooter.y;
-            double projection = targetDx * nx + targetDy * ny;
-            if (projection < 0) {
-                return false;
+            double previousX = path.pivotX;
+            double previousY = path.pivotY;
+            for (int i = 1; i <= 30; i++) {
+                double t = i / 30.0;
+                double oneMinus = 1.0 - t;
+                double currentX = oneMinus * oneMinus * path.pivotX + 2 * oneMinus * t * path.controlX + t * t * path.endX;
+                double currentY = oneMinus * oneMinus * path.pivotY + 2 * oneMinus * t * path.controlY + t * t * path.endY;
+                if (distanceToSegment(target.x, target.y, previousX, previousY, currentX, currentY) <= BLUE_LASER_HIT_RADIUS) {
+                    return true;
+                }
+                previousX = currentX;
+                previousY = currentY;
             }
+            return false;
+        }
 
-            double closestX = shooter.x + nx * projection;
-            double closestY = shooter.y + ny * projection;
-            return Math.hypot(target.x - closestX, target.y - closestY) <= BLUE_LASER_HIT_RADIUS;
+        private double distanceToSegment(double px, double py, double ax, double ay, double bx, double by) {
+            double dx = bx - ax;
+            double dy = by - ay;
+            double lengthSquared = dx * dx + dy * dy;
+            if (lengthSquared == 0) {
+                return Math.hypot(px - ax, py - ay);
+            }
+            double t = clamp(((px - ax) * dx + (py - ay) * dy) / lengthSquared, 0, 1);
+            double closestX = ax + dx * t;
+            double closestY = ay + dy * t;
+            return Math.hypot(px - closestX, py - closestY);
         }
 
         private void fireProjectile(Fighter attacker, double targetX, double targetY, int damage, boolean skill, boolean missile,
@@ -1446,11 +1497,26 @@ public class JetBattleGame {
             repaint();
         }
 
+        private int toGameX(MouseEvent event) {
+            return clampInt(event.getX() - renderOffsetX, 0, WIDTH);
+        }
+
+        private int toGameY(MouseEvent event) {
+            return clampInt(event.getY() - renderOffsetY, 0, HEIGHT);
+        }
+
+        private int clampInt(int value, int min, int max) {
+            return Math.max(min, Math.min(max, value));
+        }
+
         @Override
         protected void paintComponent(Graphics graphics) {
             super.paintComponent(graphics);
             Graphics2D g = (Graphics2D) graphics.create();
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            renderOffsetX = Math.max(0, (getWidth() - WIDTH) / 2);
+            renderOffsetY = Math.max(0, (getHeight() - HEIGHT) / 2);
+            g.translate(renderOffsetX, renderOffsetY);
 
             if (choosingDifficulty) {
                 if (showingHangar) {
@@ -1489,6 +1555,23 @@ public class JetBattleGame {
             }
 
             g.dispose();
+        }
+
+        private void toggleFullScreen() {
+            fullScreen = !fullScreen;
+            frame.dispose();
+            frame.setUndecorated(fullScreen);
+            frame.setResizable(false);
+            if (fullScreen) {
+                graphicsDevice.setFullScreenWindow(frame);
+            } else {
+                graphicsDevice.setFullScreenWindow(null);
+                frame.pack();
+                frame.setLocationRelativeTo(null);
+            }
+            frame.setVisible(true);
+            requestFocusInWindow();
+            repaint();
         }
 
         private void drawDifficultySelection(Graphics2D g) {
@@ -2036,7 +2119,7 @@ public class JetBattleGame {
 
             g.setFont(new Font("SansSerif", Font.PLAIN, 15));
             g.setColor(new Color(174, 183, 197));
-            drawCenteredText(g, "Player: WASD move, aim with cursor, mouse fire, P or Space pause, R restart", 76);
+            drawCenteredText(g, "Player: WASD move, aim with cursor, mouse fire, P or Space pause, R restart, F11 fullscreen", 76);
         }
 
         private void drawArena(Graphics2D g) {
@@ -2070,12 +2153,10 @@ public class JetBattleGame {
                 drawBlueLaserWindup(g);
             }
             if (blueLaserRemaining > 0 && !gameOver) {
-                Point2D aim = neutronDeflectedLaserAim(blue, mouseX, mouseY);
-                drawLaser(g, blue, aim.x, aim.y, blueLaserRemaining);
+                drawLaser(g, blue, laserPath(blue, mouseX, mouseY), blueLaserRemaining);
             }
             if (aiLaserRemaining > 0 && !gameOver) {
-                Point2D aim = neutronDeflectedLaserAim(red, blue.x, blue.y);
-                drawLaser(g, red, aim.x, aim.y, aiLaserRemaining);
+                drawLaser(g, red, laserPath(red, blue.x, blue.y), aiLaserRemaining);
             }
         }
 
@@ -2096,51 +2177,48 @@ public class JetBattleGame {
             g.drawArc((int) blue.x - 34, (int) blue.y - 34, 68, 68, 90, (int) Math.round(-360 * progress));
         }
 
-        private void drawLaser(Graphics2D g, Fighter shooter, double aimX, double aimY, double remaining) {
-            double dx = aimX - shooter.x;
-            double dy = aimY - shooter.y;
-            double length = Math.hypot(dx, dy);
-            if (length == 0) {
-                dx = shooter == blue ? -1 : 1;
-                dy = 0;
-                length = 1;
-            }
-
-            double nx = dx / length;
-            double ny = dy / length;
-            double distance = laserDistanceToArenaEdge(shooter, nx, ny);
-            int endX = (int) Math.round(shooter.x + nx * distance);
-            int endY = (int) Math.round(shooter.y + ny * distance);
-
+        private void drawLaser(Graphics2D g, Fighter shooter, LaserPath path, double remaining) {
             g.setColor(new Color(45, 168, 255, 70));
             g.setStroke(new BasicStroke(16f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-            g.drawLine((int) shooter.x, (int) shooter.y, endX, endY);
+            drawLaserPath(g, path);
 
             g.setColor(new Color(95, 215, 255, 150));
             g.setStroke(new BasicStroke(8f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-            g.drawLine((int) shooter.x, (int) shooter.y, endX, endY);
+            drawLaserPath(g, path);
 
             g.setColor(Color.WHITE);
             g.setStroke(new BasicStroke(2.4f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-            g.drawLine((int) shooter.x, (int) shooter.y, endX, endY);
+            drawLaserPath(g, path);
 
             g.setFont(new Font("SansSerif", Font.BOLD, 14));
             g.setColor(new Color(195, 235, 255));
             g.drawString(String.format("LASER %.1fs", remaining), (int) shooter.x + 18, (int) shooter.y - 22);
         }
 
+        private void drawLaserPath(Graphics2D g, LaserPath path) {
+            g.drawLine((int) Math.round(path.startX), (int) Math.round(path.startY), (int) Math.round(path.pivotX), (int) Math.round(path.pivotY));
+            if (path.deflected) {
+                QuadCurve2D curve = new QuadCurve2D.Double(path.pivotX, path.pivotY, path.controlX, path.controlY, path.endX, path.endY);
+                g.draw(curve);
+            }
+        }
+
         private double laserDistanceToArenaEdge(Fighter shooter, double nx, double ny) {
+            return laserDistanceToArenaEdge(shooter.x, shooter.y, nx, ny);
+        }
+
+        private double laserDistanceToArenaEdge(double startX, double startY, double nx, double ny) {
             double maxDistance = Double.POSITIVE_INFINITY;
             if (nx > 0) {
-                maxDistance = Math.min(maxDistance, (ARENA_LEFT + ARENA_WIDTH - shooter.x) / nx);
+                maxDistance = Math.min(maxDistance, (ARENA_LEFT + ARENA_WIDTH - startX) / nx);
             } else if (nx < 0) {
-                maxDistance = Math.min(maxDistance, (ARENA_LEFT - shooter.x) / nx);
+                maxDistance = Math.min(maxDistance, (ARENA_LEFT - startX) / nx);
             }
 
             if (ny > 0) {
-                maxDistance = Math.min(maxDistance, (ARENA_TOP + ARENA_HEIGHT - shooter.y) / ny);
+                maxDistance = Math.min(maxDistance, (ARENA_TOP + ARENA_HEIGHT - startY) / ny);
             } else if (ny < 0) {
-                maxDistance = Math.min(maxDistance, (ARENA_TOP - shooter.y) / ny);
+                maxDistance = Math.min(maxDistance, (ARENA_TOP - startY) / ny);
             }
 
             return Double.isFinite(maxDistance) ? Math.max(0, maxDistance) : ARENA_WIDTH;
@@ -2507,15 +2585,15 @@ public class JetBattleGame {
                     return;
                 }
                 if (choosingDifficulty) {
-                    handleSetupClick(event.getX(), event.getY(), event.getClickCount(), SwingUtilities.isRightMouseButton(event));
+                    handleSetupClick(toGameX(event), toGameY(event), event.getClickCount(), SwingUtilities.isRightMouseButton(event));
                     return;
                 }
 
                 if (gameOver) {
                     return;
                 }
-                mouseX = event.getX();
-                mouseY = event.getY();
+                mouseX = toGameX(event);
+                mouseY = toGameY(event);
 
                 boolean consumed = false;
                 if (inputMatchesMouse(keyCharge, event)) {
@@ -2523,11 +2601,11 @@ public class JetBattleGame {
                     consumed = true;
                 }
                 if (inputMatchesMouse(keyAttack, event)) {
-                    performAttackInput(event.getX(), event.getY());
+                    performAttackInput(mouseX, mouseY);
                     consumed = true;
                 }
                 if (!consumed && SwingUtilities.isRightMouseButton(event)) {
-                    playerSkillAttack(event.getX(), event.getY());
+                    playerSkillAttack(mouseX, mouseY);
                 }
             }
 
@@ -2758,16 +2836,16 @@ public class JetBattleGame {
         private final class BattleMouseMotionListener extends MouseMotionAdapter {
             @Override
             public void mouseMoved(MouseEvent event) {
-                mouseX = event.getX();
-                mouseY = event.getY();
+                mouseX = toGameX(event);
+                mouseY = toGameY(event);
             }
 
             @Override
             public void mouseDragged(MouseEvent event) {
-                mouseX = event.getX();
-                mouseY = event.getY();
+                mouseX = toGameX(event);
+                mouseY = toGameY(event);
                 if (settingsOpen && draggingVolume) {
-                    setVolumeFromMouse(event.getX(), 220 + 142, 250);
+                    setVolumeFromMouse(mouseX, 220 + 142, 250);
                     repaint();
                 }
             }
@@ -2777,6 +2855,10 @@ public class JetBattleGame {
             @Override
             public void keyPressed(KeyEvent event) {
                 int key = event.getKeyCode();
+                if (key == keyFullScreen) {
+                    toggleFullScreen();
+                    return;
+                }
                 if (key == keyInputMethodLock && rebindingControlIndex < 0) {
                     toggleInputMethodLock();
                     return;
@@ -3065,7 +3147,7 @@ public class JetBattleGame {
 
     private enum Aircraft {
         TAIL_FLAME("Tail Flame", "尾焰", new Color(210, 65, 62), 720, 400, 18000, 1.4, 145),
-        BLUE_GLOW("Blue Glow", "蓝光", new Color(70, 133, 232), 960, 320, 19000, 1.55, 150),
+        BLUE_GLOW("Blue Glow", "蓝光", new Color(70, 133, 232), 960, 200, 19000, 1.55, 155),
         NEUTRON_STAR("Neutron Star", "中子星", new Color(150, 85, 225), 700, 460, 22000, 1.5, 140);
 
         private final String name;
@@ -3110,6 +3192,10 @@ public class JetBattleGame {
     }
 
     private record Point2D(double x, double y) {
+    }
+
+    private record LaserPath(double startX, double startY, double pivotX, double pivotY,
+                             double controlX, double controlY, double endX, double endY, boolean deflected) {
     }
 
     private enum AmmoType {
