@@ -35,7 +35,7 @@ import java.util.concurrent.TimeUnit;
 public class JetBattleGame {
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
-            JFrame frame = new JFrame("Red vs Blue Battle");
+            JFrame frame = new JFrame("Jet Battle");
             frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
             frame.setResizable(false);
             frame.add(new BattlePanel());
@@ -130,8 +130,8 @@ public class JetBattleGame {
         private static final double FLOATING_TEXT_DURATION = 1.0;
         private static final int MAX_SHIELD_PICKUPS = 3;
 
-        private final Fighter red = new Fighter("Red AI", "Tail Flame", Aircraft.RED, 220, 256);
-        private final Fighter blue = new Fighter("Blue Player", "Blue Glow", Aircraft.BLUE, 740, 256);
+        private final Fighter red = new Fighter(Aircraft.TAIL_FLAME, 220, 256);
+        private final Fighter blue = new Fighter(Aircraft.BLUE_GLOW, 740, 256);
         private final List<Projectile> projectiles = new ArrayList<>();
         private final List<ShieldPickup> shieldPickups = new ArrayList<>();
         private final List<FloatingText> floatingTexts = new ArrayList<>();
@@ -190,8 +190,8 @@ public class JetBattleGame {
         private int keyInputMethodLock = KeyEvent.VK_F12;
         private String message = "WASD move. Left click fires. Right click fires charged skill.";
         private Difficulty difficulty = Difficulty.MEDIUM;
-        private Aircraft playerAircraft = Aircraft.BLUE;
-        private Aircraft aiAircraft = Aircraft.RED;
+        private Aircraft playerAircraft = Aircraft.BLUE_GLOW;
+        private Aircraft aiAircraft = Aircraft.TAIL_FLAME;
         private boolean choosingDifficulty = true;
         private boolean showingHangar;
         private boolean aircraftMenuOpen = true;
@@ -276,7 +276,7 @@ public class JetBattleGame {
         }
 
         private void updatePlayerAutoFire(double seconds) {
-            if (playerAircraft == Aircraft.RED) {
+            if (playerAircraft == Aircraft.TAIL_FLAME) {
                 return;
             }
 
@@ -456,9 +456,9 @@ public class JetBattleGame {
 
         private double chargeMultiplierFor(Aircraft aircraft) {
             return switch (aircraft) {
-                case BLUE -> BLUE_CHARGE_MULTIPLIER;
+                case BLUE_GLOW -> BLUE_CHARGE_MULTIPLIER;
                 case NEUTRON_STAR -> NEUTRON_CHARGE_MULTIPLIER;
-                case RED -> 1.0;
+                case TAIL_FLAME -> 1.0;
             };
         }
 
@@ -656,10 +656,10 @@ public class JetBattleGame {
             pendingBlueGlowLaserType = burstShot ? LaserType.NON_CONTINUOUS : LaserType.NONE;
             fireBlueGlowLasers(blue, red, mouseX, mouseY, damage, text("蓝光", "Blue Glow"));
             if (burstShot) {
-                message = String.format("%s burst fire. Multiplier x%.2f", blue.model, blueBurstMultiplier);
+                message = String.format("%s burst fire. Multiplier x%.2f", fighterDisplayName(blue), blueBurstMultiplier);
                 blueBurstMultiplier = Math.max(BLUE_MIN_BURST_MULTIPLIER, blueBurstMultiplier - BLUE_BURST_MULTIPLIER_DROP);
             } else {
-                message = blue.model + " fired a precision twin shot.";
+                message = fighterDisplayName(blue) + " fired a precision twin shot.";
             }
         }
 
@@ -704,22 +704,22 @@ public class JetBattleGame {
             blueBurstQueued = false;
             blueBurstShotsRemaining = 0;
             blueBurstMultiplier = BLUE_INITIAL_BURST_MULTIPLIER;
-            if (playerAircraft == Aircraft.BLUE) {
+            if (playerAircraft == Aircraft.BLUE_GLOW) {
                 blueLaserWindupRemaining = BLUE_LASER_WINDUP_DURATION;
                 blueLaserDamageCarry = 0;
                 playSkillSound();
-                message = blue.model + " is charging blue laser.";
+                message = fighterDisplayName(blue) + " is charging blue laser.";
             } else if (playerAircraft == Aircraft.NEUTRON_STAR) {
                 playerNeutronSkillWindupRemaining = NEUTRON_SKILL_WINDUP_DURATION;
                 playerNeutronSkillTargetX = targetX;
                 playerNeutronSkillTargetY = targetY;
                 playSkillSound();
-                message = blue.model + " is compressing a neutron orb.";
+                message = fighterDisplayName(blue) + " is compressing a neutron orb.";
             } else {
                 int damage = tailFlameMissileDamage(blue);
                 fireTailFlameWingMissiles(blue, red, mouseX, mouseY, damage);
                 playSkillSound();
-                message = blue.model + " launched six homing missiles.";
+                message = fighterDisplayName(blue) + " launched six homing missiles.";
             }
             nextPlayerAttackTime = System.currentTimeMillis() + PLAYER_SKILL_COOLDOWN;
         }
@@ -733,14 +733,14 @@ public class JetBattleGame {
                 return;
             }
 
-            if (aiAircraft == Aircraft.BLUE) {
+            if (aiAircraft == Aircraft.BLUE_GLOW) {
                 if (red.charge >= MAX_CHARGE) {
                     red.charge = 0;
                     red.chargeCarry = 0;
                     aiLaserRemaining = BLUE_LASER_DURATION;
                     aiLaserDamageCarry = 0;
                     aiBlueBurstMultiplier = BLUE_INITIAL_BURST_MULTIPLIER;
-                    message = red.model + " AI activated blue laser.";
+                    message = fighterDisplayName(red) + " AI activated blue laser.";
                 } else {
                     if (random.nextDouble() < 0.32) {
                         aiBlueBurstMode = !aiBlueBurstMode;
@@ -748,14 +748,14 @@ public class JetBattleGame {
                     }
                     if (aiBlueBurstMode) {
                         fireAiBlueBurstRound();
-                        message = red.model + " AI used burst laser mode.";
+                        message = fighterDisplayName(red) + " AI used burst laser mode.";
                     } else {
                         pendingBlueGlowChargeMultiplier = 1.0;
                         pendingBlueGlowAmmoType = AmmoType.BULLET;
                         pendingBlueGlowLaserType = LaserType.NONE;
                         int damage = blueGlowAttackDamage(red, false, aiBlueBurstMultiplier);
                     fireBlueGlowLasers(red, blue, blue.x, blue.y, damage, text("蓝光", "Blue Glow"));
-                    message = red.model + " AI fired twin wing lasers.";
+                    message = fighterDisplayName(red) + " AI fired twin wing lasers.";
                     }
                 }
             } else if (aiAircraft == Aircraft.NEUTRON_STAR) {
@@ -763,20 +763,20 @@ public class JetBattleGame {
                     red.charge = 0;
                     red.chargeCarry = 0;
                     aiNeutronSkillWindupRemaining = NEUTRON_SKILL_WINDUP_DURATION;
-                    message = red.model + " AI is compressing a neutron orb.";
+                    message = fighterDisplayName(red) + " AI is compressing a neutron orb.";
                 } else {
                     fireNeutronStarShot(red, blue, blue.x, blue.y, false);
-                    message = red.model + " AI fired a neutron shot.";
+                    message = fighterDisplayName(red) + " AI fired a neutron shot.";
                 }
             } else if (red.charge >= MAX_CHARGE) {
                 int damage = tailFlameMissileDamage(red);
                 red.charge = 0;
                 red.chargeCarry = 0;
                 fireTailFlameWingMissiles(red, blue, blue.x, blue.y, damage);
-                message = red.model + " AI launched six homing missiles.";
+                message = fighterDisplayName(red) + " AI launched six homing missiles.";
             } else {
                 fireTailFlameShot(red, blue, blue.x, blue.y, false);
-                message = red.model + " AI fired a homing shot.";
+                message = fighterDisplayName(red) + " AI fired a homing shot.";
             }
         }
 
@@ -784,8 +784,8 @@ public class JetBattleGame {
             int damage = normalDamage(attacker, target);
             playFireSound(AmmoType.MISSILE);
             fireProjectile(attacker, targetX, targetY, damage, false, true, true, 3.8, target, aircraftFor(attacker).color,
-                    (fromPlayer ? blue.model : red.model) + " homing shot hit for " + damage + " damage.");
-            message = (fromPlayer ? blue.model : red.model) + " fired a homing shot.";
+                    fighterDisplayName(fromPlayer ? blue : red) + " homing shot hit for " + damage + " damage.");
+            message = fighterDisplayName(fromPlayer ? blue : red) + " fired a homing shot.";
         }
 
         private void fireNeutronStarShot(Fighter attacker, Fighter target, double targetX, double targetY, boolean fromPlayer) {
@@ -795,9 +795,9 @@ public class JetBattleGame {
             Point2D nose = transformPoint(attacker.x, attacker.y, angle, 28, 0);
             fireProjectileFrom(nose.x, nose.y, attacker, targetX, targetY, damage, false, false, false, 0, target,
                     aircraftFor(attacker).color,
-                    (fromPlayer ? blue.model : red.model) + " neutron shot hit for " + damage + " damage.",
+                    fighterDisplayName(fromPlayer ? blue : red) + " neutron shot hit for " + damage + " damage.",
                     1.0, AmmoType.LASER, LaserType.NON_CONTINUOUS);
-            message = (fromPlayer ? blue.model : red.model) + " fired a neutron shot.";
+            message = fighterDisplayName(fromPlayer ? blue : red) + " fired a neutron shot.";
         }
 
         private void fireNeutronStarSkillOrb(Fighter attacker, Fighter target, double targetX, double targetY) {
@@ -829,7 +829,7 @@ public class JetBattleGame {
                     target,
                     attacker == blue,
                     aircraftFor(attacker).color,
-                    attacker.model + " neutron singularity locked target.",
+                    fighterDisplayName(attacker) + " neutron singularity locked target.",
                     0,
                     AmmoType.LASER,
                     LaserType.NON_CONTINUOUS
@@ -839,7 +839,7 @@ public class JetBattleGame {
             projectile.neutronPullRemaining = NEUTRON_ORB_PULL_DURATION;
             projectile.neutronFlightRemaining = NEUTRON_ORB_FLIGHT_DURATION;
             projectiles.add(projectile);
-            message = attacker.model + " launched a neutron singularity.";
+            message = fighterDisplayName(attacker) + " launched a neutron singularity.";
         }
 
         private void fireTailFlameWingMissiles(Fighter attacker, Fighter target, double targetX, double targetY, int damage) {
@@ -902,7 +902,7 @@ public class JetBattleGame {
             if (blueLaserWindupRemaining == 0) {
                 blueLaserRemaining = BLUE_LASER_DURATION;
                 blueLaserDamageCarry = 0;
-                message = blue.model + " activated blue laser for 3 seconds.";
+                message = fighterDisplayName(blue) + " activated blue laser for 3 seconds.";
             }
         }
 
@@ -956,7 +956,7 @@ public class JetBattleGame {
                 if (damage > 0) {
                     blueLaserDamageCarry -= damage;
                     applyDamage(red, damage, AmmoType.LASER, LaserType.CONTINUOUS);
-                    message = blue.model + " laser is burning target.";
+                    message = fighterDisplayName(blue) + " laser is burning target.";
                     checkWinner();
                 }
             }
@@ -977,7 +977,7 @@ public class JetBattleGame {
                 if (damage > 0) {
                     aiLaserDamageCarry -= damage;
                     applyDamage(blue, damage, AmmoType.LASER, LaserType.CONTINUOUS);
-                    message = red.model + " AI laser is burning target.";
+                    message = fighterDisplayName(red) + " AI laser is burning target.";
                     checkWinner();
                 }
             }
@@ -1132,7 +1132,7 @@ public class JetBattleGame {
         }
 
         private double beamProjectileSpeed(Fighter attacker) {
-            return aircraftFor(attacker) == Aircraft.BLUE ? BLUE_GLOW_PROJECTILE_SPEED : BEAM_PROJECTILE_SPEED;
+            return aircraftFor(attacker) == Aircraft.BLUE_GLOW ? BLUE_GLOW_PROJECTILE_SPEED : BEAM_PROJECTILE_SPEED;
         }
 
         private int normalDamage(Fighter attacker, Fighter defender) {
@@ -1165,6 +1165,10 @@ public class JetBattleGame {
 
         private Aircraft aircraftFor(Fighter fighter) {
             return fighter == blue ? playerAircraft : aiAircraft;
+        }
+
+        private String fighterDisplayName(Fighter fighter) {
+            return aircraftFor(fighter).displayName(chinese);
         }
 
         private void applyDamage(Fighter target, int damage, AmmoType ammoType, LaserType laserType) {
@@ -1279,7 +1283,7 @@ public class JetBattleGame {
                 aiTimer.stop();
                 musicTimer.stop();
                 playExplosionSound();
-                message = playerWon ? "Enemy aircraft destroyed." : "Player aircraft destroyed.";
+                message = fighterDisplayName(destroyed) + " destroyed.";
             }
         }
 
@@ -1287,7 +1291,8 @@ public class JetBattleGame {
             if (System.currentTimeMillis() - explosionStartedAt >= 1200) {
                 explosionActive = false;
                 resultReady = true;
-                message = playerWon ? "Player wins. Press R to return to setup." : "AI wins. Press R to return to setup.";
+                Fighter winner = playerWon ? blue : red;
+                message = fighterDisplayName(winner) + " wins. Press R to return to setup.";
             }
         }
 
@@ -1299,7 +1304,7 @@ public class JetBattleGame {
             red.applyAircraft(aiAircraft);
             red.attack = difficulty.aiAttack;
             red.speed = difficulty.aiSpeed;
-            int minimumAiInterval = aiAircraft == Aircraft.RED ? TAIL_FLAME_ATTACK_COOLDOWN : NORMAL_ATTACK_COOLDOWN;
+            int minimumAiInterval = aiAircraft == Aircraft.TAIL_FLAME ? TAIL_FLAME_ATTACK_COOLDOWN : NORMAL_ATTACK_COOLDOWN;
             int aiInterval = Math.max(minimumAiInterval, difficulty.aiAttackInterval);
             aiTimer.setDelay(aiInterval);
             aiTimer.setInitialDelay(aiInterval);
@@ -1925,7 +1930,7 @@ public class JetBattleGame {
         private void drawTitle(Graphics2D g) {
             g.setFont(new Font("SansSerif", Font.BOLD, 26));
             g.setColor(new Color(238, 240, 245));
-            drawCenteredText(g, "Red AI vs Blue Player", 48);
+            drawCenteredText(g, fighterDisplayName(red) + " AI vs " + fighterDisplayName(blue) + " Player", 48);
 
             g.setFont(new Font("SansSerif", Font.PLAIN, 15));
             g.setColor(new Color(174, 183, 197));
@@ -2160,11 +2165,11 @@ public class JetBattleGame {
 
             g.setFont(new Font("SansSerif", Font.BOLD, 22));
             g.setColor(Color.WHITE);
-            g.drawString(fighter.side, x + 18, y + 34);
+            g.drawString(fighterDisplayName(fighter), x + 18, y + 34);
 
             g.setFont(new Font("SansSerif", Font.BOLD, 18));
             g.setColor(mainColor);
-            g.drawString(fighter == blue ? playerAircraft.displayName(chinese) : aiAircraft.displayName(chinese), x + 18, y + 60);
+            g.drawString(fighter == blue ? text("玩家", "Player") : text("人机", "AI"), x + 18, y + 60);
 
             drawBar(g, "HP", fighter.hp, fighter.maxHp, x + 18, y + 82, 234, new Color(71, 196, 117));
             drawBar(g, "Skill", fighter.charge, MAX_CHARGE, x + 18, y + 118, 108, new Color(244, 196, 77));
@@ -2177,7 +2182,7 @@ public class JetBattleGame {
             g.drawString("DEF " + fighter.defense, x + 86, y + 154);
             g.drawString("SPD " + fighter.speed, x + 154, y + 154);
             g.drawString("SKL " + fighter.skillBonus, x + 210, y + 154);
-            if (fighter == blue && playerAircraft == Aircraft.BLUE) {
+            if (fighter == blue && playerAircraft == Aircraft.BLUE_GLOW) {
                 g.setFont(new Font("SansSerif", Font.PLAIN, 12));
                 g.setColor(new Color(190, 207, 226));
                 g.drawString("Mode " + (blueBurstMode ? "Burst" : "Single") + " (C)", x + 18, y + 176);
@@ -2334,7 +2339,7 @@ public class JetBattleGame {
         }
 
         private void performAttackInput(double targetX, double targetY) {
-            if (playerAircraft == Aircraft.BLUE) {
+            if (playerAircraft == Aircraft.BLUE_GLOW) {
                 if (blueBurstMode) {
                     if (canPlayerFireNormal()) {
                         leftMouseDown = true;
@@ -2711,13 +2716,13 @@ public class JetBattleGame {
                     return;
                 }
 
-                if (key == keyBlueMode && playerAircraft == Aircraft.BLUE && !paused) {
+                if (key == keyBlueMode && playerAircraft == Aircraft.BLUE_GLOW && !paused) {
                     blueBurstMode = !blueBurstMode;
                     leftMouseDown = false;
                     blueBurstQueued = false;
                     blueBurstShotsRemaining = 0;
                     blueBurstMultiplier = BLUE_INITIAL_BURST_MULTIPLIER;
-                    message = blueBurstMode ? "Blue Glow mode: burst fire." : "Blue Glow mode: single shot.";
+                    message = fighterDisplayName(blue) + (blueBurstMode ? " mode: burst fire." : " mode: single shot.");
                     repaint();
                     return;
                 }
@@ -2902,8 +2907,8 @@ public class JetBattleGame {
     }
 
     private enum Aircraft {
-        RED("Tail Flame", "尾焰", new Color(210, 65, 62), 720, 400, 18000, 1.4, 145),
-        BLUE("Blue Glow", "蓝光", new Color(70, 133, 232), 960, 320, 19000, 1.25, 150),
+        TAIL_FLAME("Tail Flame", "尾焰", new Color(210, 65, 62), 720, 400, 18000, 1.4, 145),
+        BLUE_GLOW("Blue Glow", "蓝光", new Color(70, 133, 232), 960, 320, 19000, 1.25, 150),
         NEUTRON_STAR("Neutron Star", "中子星", new Color(150, 85, 225), 700, 460, 22000, 1.5, 140);
 
         private final String name;
@@ -2932,16 +2937,16 @@ public class JetBattleGame {
 
         private String normalDescription(boolean chinese) {
             return switch (this) {
-                case RED -> chinese ? "追踪导弹" : "Homing missile";
-                case BLUE -> chinese ? "双翼弹药" : "Twin wing shots";
+                case TAIL_FLAME -> chinese ? "追踪导弹" : "Homing missile";
+                case BLUE_GLOW -> chinese ? "双翼弹药" : "Twin wing shots";
                 case NEUTRON_STAR -> chinese ? "紫色非连续激光光球" : "Purple non-continuous laser orb";
             };
         }
 
         private String skillDescription(boolean chinese) {
             return switch (this) {
-                case RED -> chinese ? "六枚追踪导弹" : "Six homing missiles";
-                case BLUE -> chinese ? "连续型蓝色激光" : "Continuous blue laser";
+                case TAIL_FLAME -> chinese ? "六枚追踪导弹" : "Six homing missiles";
+                case BLUE_GLOW -> chinese ? "连续型蓝色激光" : "Continuous blue laser";
                 case NEUTRON_STAR -> chinese ? "慢速奇点光球" : "Slow singularity orb";
             };
         }
@@ -2992,8 +2997,6 @@ public class JetBattleGame {
     }
 
     private static final class Fighter {
-        private final String side;
-        private String model;
         private int attack;
         private int defense;
         private int maxHp;
@@ -3019,9 +3022,7 @@ public class JetBattleGame {
         private double x;
         private double y;
 
-        Fighter(String side, String model, Aircraft aircraft, double startX, double startY) {
-            this.side = side;
-            this.model = model;
+        Fighter(Aircraft aircraft, double startX, double startY) {
             this.startX = startX;
             this.startY = startY;
             applyAircraft(aircraft);
@@ -3029,7 +3030,6 @@ public class JetBattleGame {
         }
 
         private void applyAircraft(Aircraft aircraft) {
-            model = aircraft.name;
             attack = aircraft.attack;
             defense = aircraft.defense;
             maxHp = aircraft.maxHp;
