@@ -52,7 +52,7 @@ public class JetBattleGame {
          * | Aircraft   | ATK | DEF | HP    | Skill multiplier | SPD | Normal attack                  | Skill                                      | Charge efficiency |
          * |------------|-----|-----|-------|------------------|-----|--------------------------------|--------------------------------------------|-------------------|
          * | Tail Flame | 720 | 400 | 18000 | 1.40             | 145 | Missile, ATK - DEF, 700 ms     | 6 missiles, ATK / 6 * skill multiplier    | Base x1.00        |
-         * | Blue Glow  | 960 | 320 | 19000 | 1.55             | 150 | Bullet, ATK * 0.5, 300 ms      | Continuous laser, ATK * 0.7 * skill / sec | Base x1.05        |
+         * | Blue Glow  | 960 | 320 | 19000 | 1.55             | 150 | Bullet, ATK * 0.5, 350 ms      | Continuous laser, ATK * 0.7 * skill / sec | Base x1.05        |
          * | Neutron Star | 700 | 460 | 22000 | 1.50           | 140 | Non-continuous laser orb, ATK - DEF, 600 ms | Slow singularity orb, random final ammo type | Base x1.20 + hit recovery |
          *
          * Standard baseline values for future aircraft:
@@ -63,7 +63,7 @@ public class JetBattleGame {
          * Blue Glow burst mode:
          * | Shots per round | Interval | Round cooldown | Damage per shot                         | Initial multiplier | Drop per shot | Min multiplier | Charge efficiency |
          * |-----------------|----------|----------------|------------------------------------------|--------------------|---------------|----------------|-------------------|
-         * | 4               | 140 ms   | 850 ms         | ATK * 0.62 / 4 * current burst multiplier | 1.20               | 0.05          | 0.25           | Base x0.65025     |
+         * | 4               | 140 ms   | 850 ms         | ATK * 0.68 / 4 * current burst multiplier | 1.20               | 0.05          | 0.25           | Base x0.65025     |
          */
         private static final int WIDTH = 960;
         private static final int HEIGHT = 720;
@@ -84,7 +84,7 @@ public class JetBattleGame {
         private static final int PLAYER_SKILL_COOLDOWN = 280;
         private static final int NORMAL_ATTACK_COOLDOWN = 600;
         private static final int TAIL_FLAME_ATTACK_COOLDOWN = 700;
-        private static final int BLUE_SINGLE_SHOT_COOLDOWN = 300;
+        private static final int BLUE_SINGLE_SHOT_COOLDOWN = 350;
         private static final int BLUE_FIRE_INTERVAL = 140;
         private static final int BLUE_BURST_ROUND_COOLDOWN = 850;
         private static final int BLUE_BURST_SHOTS_PER_ROUND = 4;
@@ -1181,7 +1181,7 @@ public class JetBattleGame {
 
         private int blueGlowAttackDamage(Fighter attacker, boolean burstShot, double burstMultiplier) {
             double damage = burstShot
-                    ? attacker.attack * 0.62 / BLUE_BURST_SHOTS_PER_ROUND * burstMultiplier
+                    ? attacker.attack * 0.68 / BLUE_BURST_SHOTS_PER_ROUND * burstMultiplier
                     : attacker.attack * 0.5 * burstMultiplier;
             return Math.max(1, (int) Math.round(damage));
         }
