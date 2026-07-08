@@ -52,7 +52,7 @@ public class JetBattleGame {
          * | Aircraft   | ATK | DEF | HP    | Skill multiplier | SPD | Normal attack                  | Skill                                      | Charge efficiency |
          * |------------|-----|-----|-------|------------------|-----|--------------------------------|--------------------------------------------|-------------------|
          * | Tail Flame | 720 | 400 | 18000 | 1.40             | 145 | Missile, ATK - DEF, 700 ms     | 6 missiles, ATK / 6 * skill multiplier    | Base x1.00        |
-         * | Blue Glow  | 960 | 320 | 19000 | 1.55             | 150 | Bullet, ATK * 0.5, 400 ms      | Continuous laser, ATK * 0.7 * skill / sec | Base x1.05        |
+         * | Blue Glow  | 960 | 320 | 19000 | 1.55             | 150 | Bullet, ATK * 0.5, 300 ms      | Continuous laser, ATK * 0.7 * skill / sec | Base x1.05        |
          * | Neutron Star | 700 | 460 | 22000 | 1.50           | 140 | Non-continuous laser orb, ATK - DEF, 600 ms | Slow singularity orb, random final ammo type | Base x1.20 + hit recovery |
          *
          * Standard baseline values for future aircraft:
@@ -84,7 +84,7 @@ public class JetBattleGame {
         private static final int PLAYER_SKILL_COOLDOWN = 280;
         private static final int NORMAL_ATTACK_COOLDOWN = 600;
         private static final int TAIL_FLAME_ATTACK_COOLDOWN = 700;
-        private static final int BLUE_SINGLE_SHOT_COOLDOWN = 400;
+        private static final int BLUE_SINGLE_SHOT_COOLDOWN = 300;
         private static final int BLUE_FIRE_INTERVAL = 140;
         private static final int BLUE_BURST_ROUND_COOLDOWN = 850;
         private static final int BLUE_BURST_SHOTS_PER_ROUND = 4;
@@ -148,6 +148,7 @@ public class JetBattleGame {
         private long nextBlueShotTime;
         private long nextAiBlueShotTime;
         private long blueBurstRoundCooldownUntil;
+        private long aiBlueBurstRoundCooldownUntil;
         private int mouseX = 480;
         private int mouseY = 256;
         private double aiMoveX = 0.8;
@@ -762,15 +763,17 @@ public class JetBattleGame {
                         aiBlueBurstMultiplier = BLUE_INITIAL_BURST_MULTIPLIER;
                     }
                     if (aiBlueBurstMode) {
-                        queueAiBlueBurstRound();
-                        message = fighterDisplayName(red) + " AI used burst laser mode.";
+                        if (System.currentTimeMillis() >= aiBlueBurstRoundCooldownUntil) {
+                            queueAiBlueBurstRound();
+                            message = fighterDisplayName(red) + " AI used burst laser mode.";
+                        }
                     } else {
                         pendingBlueGlowChargeMultiplier = 1.0;
                         pendingBlueGlowAmmoType = AmmoType.BULLET;
                         pendingBlueGlowLaserType = LaserType.NONE;
                         int damage = blueGlowAttackDamage(red, false, aiBlueBurstMultiplier);
-                    fireBlueGlowLasers(red, blue, blue.x, blue.y, damage, text("蓝光", "Blue Glow"));
-                    message = fighterDisplayName(red) + " AI fired twin wing lasers.";
+                        fireBlueGlowLasers(red, blue, blue.x, blue.y, damage, text("蓝光", "Blue Glow"));
+                        message = fighterDisplayName(red) + " AI fired twin wing lasers.";
                     }
                 }
             } else if (aiAircraft == Aircraft.NEUTRON_STAR) {
@@ -921,6 +924,9 @@ public class JetBattleGame {
             aiBlueBurstMultiplier = Math.max(BLUE_MIN_BURST_MULTIPLIER, aiBlueBurstMultiplier - BLUE_BURST_MULTIPLIER_DROP);
             aiBlueBurstShotsRemaining--;
             nextAiBlueShotTime = now + BLUE_FIRE_INTERVAL;
+            if (aiBlueBurstShotsRemaining == 0) {
+                aiBlueBurstRoundCooldownUntil = now + BLUE_BURST_ROUND_COOLDOWN;
+            }
         }
 
         private void updatePlayerLaserWindup(double seconds) {
@@ -1357,6 +1363,7 @@ public class JetBattleGame {
             aiBlueBurstShotsRemaining = 0;
             nextAiBlueShotTime = 0;
             blueBurstRoundCooldownUntil = 0;
+            aiBlueBurstRoundCooldownUntil = 0;
             blueBurstMode = false;
             aiBlueBurstMode = false;
             leftMouseDown = false;
@@ -1411,6 +1418,7 @@ public class JetBattleGame {
             aiBlueBurstShotsRemaining = 0;
             nextAiBlueShotTime = 0;
             blueBurstRoundCooldownUntil = 0;
+            aiBlueBurstRoundCooldownUntil = 0;
             blueBurstMode = false;
             aiBlueBurstMode = false;
             leftMouseDown = false;
