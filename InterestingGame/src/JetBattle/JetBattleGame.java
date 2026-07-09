@@ -34,6 +34,7 @@ import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class JetBattleGame {
     public static void main(String[] args) {
@@ -1328,6 +1329,7 @@ public class JetBattleGame {
         }
 
         private void playFireSound(AmmoType ammoType) {
+            audio.beginImmediateSequence();
             if (ammoType == AmmoType.MISSILE) {
                 audio.playSweep(190, 90, 170, 0.52, 0.55);
             } else if (ammoType == AmmoType.LASER) {
@@ -1339,6 +1341,7 @@ public class JetBattleGame {
         }
 
         private void playSkillSound() {
+            audio.beginImmediateSequence();
             audio.playSweep(260, 920, 260, 0.48, 0.25);
             audio.playTone(1180, 170, 0.34, 0.15);
         }
@@ -1366,11 +1369,15 @@ public class JetBattleGame {
         }
 
         private void playExplosionSound() {
+            audio.beginImmediateSequence();
             audio.playSweep(120, 42, 420, 0.72, 0.85);
             audio.playTone(64, 360, 0.55, 0.70);
         }
 
         private void checkWinner() {
+            if (gameOver) {
+                return;
+            }
             if (red.hp <= 0 || blue.hp <= 0) {
                 gameOver = true;
                 playerWon = red.hp <= 0;
@@ -3091,8 +3098,9 @@ public class JetBattleGame {
 
     private static final class AudioEngine {
         private static final float SAMPLE_RATE = 22050f;
-        private static final Tone STOP = new Tone(0, 0, 0, 0, 0);
+        private static final Tone STOP = new Tone(0, 0, 0, 0, 0, -1);
         private final LinkedBlockingQueue<Tone> queue = new LinkedBlockingQueue<>(96);
+        private final AtomicLong sequence = new AtomicLong();
         private volatile double volume = 0.55;
 
         private AudioEngine() {
@@ -3105,6 +3113,11 @@ public class JetBattleGame {
             this.volume = Math.max(0, Math.min(1, volume));
         }
 
+        private void beginImmediateSequence() {
+            sequence.incrementAndGet();
+            queue.clear();
+        }
+
         private void playTone(double frequency, int durationMs, double gain, double harmonicMix) {
             playSweep(frequency, frequency, durationMs, gain, harmonicMix);
         }
@@ -3113,7 +3126,7 @@ public class JetBattleGame {
             if (volume <= 0 || durationMs <= 0 || startFrequency <= 0 || endFrequency <= 0) {
                 return;
             }
-            Tone tone = new Tone(startFrequency, endFrequency, durationMs, gain, harmonicMix);
+            Tone tone = new Tone(startFrequency, endFrequency, durationMs, gain, harmonicMix, sequence.get());
             if (!queue.offer(tone)) {
                 queue.poll();
                 queue.offer(tone);
@@ -3164,7 +3177,17 @@ public class JetBattleGame {
                 data[i * 2] = (byte) (sample & 0xff);
                 data[i * 2 + 1] = (byte) ((sample >> 8) & 0xff);
             }
-            line.write(data, 0, data.length);
+            int offset = 0;
+            int chunkBytes = 512;
+            while (offset < data.length) {
+                if (tone.sequence != sequence.get()) {
+                    line.flush();
+                    return;
+                }
+                int length = Math.min(chunkBytes, data.length - offset);
+                line.write(data, offset, length);
+                offset += length;
+            }
         }
 
         private void writeSilence(SourceDataLine line, int durationMs) {
@@ -3178,13 +3201,15 @@ public class JetBattleGame {
             private final int durationMs;
             private final double gain;
             private final double harmonicMix;
+            private final long sequence;
 
-            private Tone(double startFrequency, double endFrequency, int durationMs, double gain, double harmonicMix) {
+            private Tone(double startFrequency, double endFrequency, int durationMs, double gain, double harmonicMix, long sequence) {
                 this.startFrequency = startFrequency;
                 this.endFrequency = endFrequency;
                 this.durationMs = durationMs;
                 this.gain = gain;
                 this.harmonicMix = harmonicMix;
+                this.sequence = sequence;
             }
         }
     }
