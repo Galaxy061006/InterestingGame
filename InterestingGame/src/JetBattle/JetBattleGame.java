@@ -57,8 +57,8 @@ public class JetBattleGame {
          * |------------|-----|-----|-------|------------------|-----|--------------------------------|--------------------------------------------|-------------------|
          * | Tail Flame | 720 | 400 | 18000 | 1.40             | 145 | Missile, ATK - DEF, 700 ms     | 6 missiles, ATK / 6 * skill multiplier    | Base x1.00        |
          * | Blue Glow  | 960 | 200 | 19000 | 1.55             | 155 | Bullet, ATK * 0.5, 400 ms      | Continuous laser, ATK * 0.7 * skill / sec | Base x1.05        |
-         * | Neutron Star | 700 | 460 | 22000 | 1.50           | 140 | Non-continuous laser orb, ATK - DEF, 600 ms | Slow singularity orb, random final ammo type | Base x1.20 + hit recovery |
-         * | Venus      | 820 | 300 | 18500 | 1.30             | 148 | Nose laser bar, ATK - DEF, 600 ms (420 ms armored) | 9 s reinforced armor and twin non-continuous laser cannons | Base x1.00 |
+         * | Neutron Star | 700 | 460 | 22000 | 1.50           | 135 | Non-continuous laser orb, ATK - DEF, 600 ms | Slow singularity orb, random final ammo type | Base x1.20 + hit/deflect recovery |
+         * | Venus      | 820 | 300 | 18500 | 1.30             | 148 | Nose laser bar, ATK * 0.94 - DEF, 600 ms (420 ms armored) | 9 s reinforced armor and piercing twin laser cannons | Base x1.00 |
          *
          * Standard baseline values for future aircraft:
          * | ATK | DEF | HP    | Skill multiplier | SPD   |
@@ -146,6 +146,7 @@ public class JetBattleGame {
         private static final double VENUS_GATE_DURATION = 1.2;
         private static final double VENUS_ARMOR_DURATION = 9.0;
         private static final double VENUS_ENHANCED_ATTACK_MULTIPLIER = 0.78;
+        private static final double VENUS_NORMAL_ATTACK_MULTIPLIER = 0.94;
         private static final double VENUS_ATTACK_BOOST = 1.12;
         private static final double VENUS_DEFENSE_BOOST = 1.20;
         private static final double VENUS_SPEED_BOOST = 1.10;
@@ -476,6 +477,9 @@ public class JetBattleGame {
                     iterator.remove();
                     continue;
                 }
+                if (projectile.piercing && projectile.targetHit) {
+                    continue;
+                }
 
                 double hitDistance = FIGHTER_SIZE / 2.0 + projectile.radius;
                 if (Math.hypot(projectile.x - target.x, projectile.y - target.y) <= hitDistance) {
@@ -487,7 +491,11 @@ public class JetBattleGame {
                         addCharge(attacker, projectile.chargeMultiplier);
                     }
                     message = projectile.hitMessage;
-                    iterator.remove();
+                    if (projectile.piercing) {
+                        projectile.targetHit = true;
+                    } else {
+                        iterator.remove();
+                    }
                     checkWinner();
                 }
             }
@@ -556,6 +564,9 @@ public class JetBattleGame {
                 }
                 if (!projectile.neutronDeflected) {
                     projectile.neutronDeflected = true;
+                    if (orb.neutronOwner != null) {
+                        addCharge(orb.neutronOwner, 0.2);
+                    }
                     if (projectile.ammoType != AmmoType.LASER) {
                         projectile.removeSpecialEffects();
                     }
@@ -887,7 +898,8 @@ public class JetBattleGame {
                         effectiveAttack(attacker) * VENUS_ENHANCED_ATTACK_MULTIPLIER * attacker.skillBonus
                                 - effectiveDefense(target) * 0.25));
             } else {
-                totalDamage = normalDamage(attacker, target);
+                totalDamage = Math.max(1, (int) Math.round(
+                        effectiveAttack(attacker) * VENUS_NORMAL_ATTACK_MULTIPLIER - effectiveDefense(target)));
             }
 
             playVenusLaserSound(enhanced);
@@ -918,7 +930,7 @@ public class JetBattleGame {
                 dy = 0;
                 length = 1;
             }
-            double speed = enhanced ? 720 : 620;
+            double speed = enhanced ? 780 : 720;
             Projectile projectile = new Projectile(
                     startX,
                     startY,
@@ -941,6 +953,7 @@ public class JetBattleGame {
             );
             projectile.venusLaserBar = true;
             projectile.venusEnhancedLaser = enhanced;
+            projectile.piercing = enhanced;
             projectiles.add(projectile);
         }
 
@@ -3513,7 +3526,7 @@ public class JetBattleGame {
     private enum Aircraft {
         TAIL_FLAME("Tail Flame", "尾焰", new Color(210, 65, 62), 720, 400, 18000, 1.4, 145),
         BLUE_GLOW("Blue Glow", "蓝光", new Color(70, 133, 232), 960, 200, 19000, 1.55, 155),
-        NEUTRON_STAR("Neutron Star", "中子星", new Color(150, 85, 225), 700, 460, 22000, 1.5, 140),
+        NEUTRON_STAR("Neutron Star", "中子星", new Color(150, 85, 225), 700, 460, 22000, 1.5, 135),
         VENUS("Venus", "金星", new Color(232, 181, 52), 820, 300, 18500, 1.3, 148);
 
         private final String name;
@@ -3576,11 +3589,11 @@ public class JetBattleGame {
                         ? new String[]{"双翼齐射，单点间隔 400ms", "按 C 切换四连发压制模式"}
                         : new String[]{"Twin-wing volley every 400 ms", "Press C for four-shot burst mode"};
                 case NEUTRON_STAR -> chinese
-                        ? new String[]{"每 600ms 发射非连续激光球", "命中时拥有较高技能充能效率"}
-                        : new String[]{"Laser orb every 600 ms", "Hits provide strong skill charge"};
+                        ? new String[]{"每 600ms 发射非连续激光球", "偏转弹药回复基础回能的 20%"}
+                        : new String[]{"Laser orb every 600 ms", "Deflections restore 20% base hit charge"};
                 case VENUS -> chinese
-                        ? new String[]{"机头每 600ms 发射长条激光", "强化双炮间隔缩短至 420ms"}
-                        : new String[]{"Nose laser bar every 600 ms", "Twin cannons fire every 420 ms"};
+                        ? new String[]{"机头高速激光伤害小幅降低", "强化双炮更快且可穿透目标"}
+                        : new String[]{"Faster nose laser with slightly less damage", "Twin beams fly faster and pierce targets"};
             };
         }
 
@@ -3894,6 +3907,8 @@ public class JetBattleGame {
         private boolean neutronImpactStarted;
         private boolean venusLaserBar;
         private boolean venusEnhancedLaser;
+        private boolean piercing;
+        private boolean targetHit;
         private Fighter neutronOwner;
         private AmmoType neutronResolvedType;
         private double neutronFlightRemaining;

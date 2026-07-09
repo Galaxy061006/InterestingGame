@@ -77,6 +77,10 @@ The settings panel supports language switching, volume adjustment, and key rebin
 
 During Venus's reinforced mode, its attack interval is reduced from `600ms` to `420ms`. Tail Flame's skill missiles now launch more slowly but accelerate to a higher maximum speed.
 
+金星普通激光的伤害小幅降低，但飞行速度更快；强化双炮的激光速度进一步提升，并可在命中后继续穿透。中子星速度调整为 `135`，技能光球每首次偏转一枚敌方弹药时，会恢复基础攻击命中回能的 `20%`。
+
+Venus's normal laser deals slightly less damage but travels faster. Its reinforced twin beams are faster still and continue through targets after hitting. Neutron Star's speed is now `135`; each enemy projectile first deflected by its skill orb restores `20%` of normal hit charge.
+
 ## 自定义战机 / Custom Aircraft
 
 欢迎玩家自行设计新的角色或战机，并将它们加入到游戏中。可以从战机名称、颜色、生命值、攻击力、防御力、速度、普通攻击和技能效果等方面进行设计。
