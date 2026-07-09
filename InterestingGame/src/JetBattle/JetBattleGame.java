@@ -58,7 +58,7 @@ public class JetBattleGame {
          * | Tail Flame | 720 | 400 | 18000 | 1.40             | 145 | Missile, ATK - DEF, 700 ms     | 6 missiles, ATK / 6 * skill multiplier    | Base x1.00        |
          * | Blue Glow  | 960 | 200 | 19000 | 1.55             | 155 | Bullet, ATK * 0.5, 400 ms      | Continuous laser, ATK * 0.7 * skill / sec | Base x1.05        |
          * | Neutron Star | 700 | 460 | 22000 | 1.50           | 135 | Non-continuous laser orb, ATK - DEF, 600 ms | Slow singularity orb, random final ammo type | Base x1.20 + hit/deflect recovery |
-         * | Venus      | 820 | 300 | 18500 | 1.30             | 148 | Nose laser bar, ATK * 0.94 - DEF, 600 ms (420 ms armored) | 9 s reinforced armor and piercing twin laser cannons | Base x1.00 |
+         * | Venus      | 820 | 300 | 18500 | 1.30             | 148 | Nose laser bar, ATK * 0.94 - DEF, 600 ms (420 ms armored) | 6.5 s reinforced armor and piercing twin laser cannons | Base x1.00 |
          *
          * Standard baseline values for future aircraft:
          * | ATK | DEF | HP    | Skill multiplier | SPD   |
@@ -144,7 +144,7 @@ public class JetBattleGame {
         private static final double NEUTRON_ORB_DEFLECT_STRENGTH = 5.2;
         private static final double NEUTRON_NORMAL_ORB_RADIUS = 8;
         private static final double VENUS_GATE_DURATION = 1.2;
-        private static final double VENUS_ARMOR_DURATION = 9.0;
+        private static final double VENUS_ARMOR_DURATION = 6.5;
         private static final double VENUS_ENHANCED_ATTACK_MULTIPLIER = 0.78;
         private static final double VENUS_NORMAL_ATTACK_MULTIPLIER = 0.94;
         private static final double VENUS_ATTACK_BOOST = 1.12;
@@ -3623,8 +3623,8 @@ public class JetBattleGame {
                         ? new String[]{"发射慢速奇点光球牵引目标", "可偏转弹药，并弧形偏转光束"}
                         : new String[]{"Slow singularity orb pulls targets", "Deflects projectiles and curves beams"};
                 case VENUS -> chinese
-                        ? new String[]{"星门缓慢组装强化装甲 9 秒", "提升攻防速度并获得 1600 装甲"}
-                        : new String[]{"Star gate assembles armor for 9 seconds", "Boosts ATK/DEF/SPD and grants 1600 armor"};
+                        ? new String[]{"星门缓慢组装强化装甲 6.5 秒", "提升攻防速度并获得 1600 装甲"}
+                        : new String[]{"Star gate assembles armor for 6.5 seconds", "Boosts ATK/DEF/SPD and grants 1600 armor"};
             };
         }
 

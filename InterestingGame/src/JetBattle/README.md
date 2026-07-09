@@ -69,9 +69,9 @@ The settings panel supports language switching, volume adjustment, and key rebin
 
 `Blue Glow` can press `C` to switch between single-shot mode and burst mode. Burst mode fires a fast attack round, but each round has a cooldown and its burst multiplier gradually decreases.
 
-`Venus` 会在机身后方开启星门，装甲组件从星门中飞出并与机体结合。装甲完成后持续 9 秒，攻击、防御和速度得到提升，并获得 1600 点额外装甲耐久；技能倍率保持不变。此时武器切换为两侧激光炮，每次点按会向光标交汇发射两束非连续激光。
+`Venus` 会在机身后方开启星门，装甲组件从星门中飞出并与机体结合。装甲完成后持续 6.5 秒，攻击、防御和速度得到提升，并获得 1600 点额外装甲耐久；技能倍率保持不变。此时武器切换为两侧激光炮，每次点按会向光标交汇发射两束非连续激光。
 
-`Venus` opens a star gate behind the aircraft, with armor pieces emerging and attaching to the body. Once assembled, the 9-second mode boosts attack, defense, and speed and grants 1600 armor HP while leaving the skill multiplier unchanged. Its weapons become twin laser cannons that fire two converging non-continuous beams toward the cursor.
+`Venus` opens a star gate behind the aircraft, with armor pieces emerging and attaching to the body. Once assembled, the 6.5-second mode boosts attack, defense, and speed and grants 1600 armor HP while leaving the skill multiplier unchanged. Its weapons become twin laser cannons that fire two converging non-continuous beams toward the cursor.
 
 金星强化期间的攻击间隔会从 `600ms` 缩短到 `420ms`。尾焰技能导弹采用较低初速与更高极速，发射后会呈现更明显的持续加速过程。
 
