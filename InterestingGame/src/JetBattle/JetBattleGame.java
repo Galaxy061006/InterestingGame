@@ -58,7 +58,7 @@ public class JetBattleGame {
          * | Tail Flame | 720 | 400 | 18000 | 1.40             | 145 | Missile, ATK - DEF, 700 ms     | 6 missiles, ATK / 6 * skill multiplier    | Base x1.00        |
          * | Blue Glow  | 960 | 200 | 19000 | 1.55             | 155 | Bullet, ATK * 0.5, 400 ms      | Continuous laser, ATK * 0.7 * skill / sec | Base x1.05        |
          * | Neutron Star | 700 | 460 | 22000 | 1.50           | 140 | Non-continuous laser orb, ATK - DEF, 600 ms | Slow singularity orb, random final ammo type | Base x1.20 + hit recovery |
-         * | Venus      | 820 | 300 | 18500 | 1.30             | 148 | Nose laser bar, ATK - DEF, 600 ms | 9 s reinforced armor and twin non-continuous laser cannons | Base x1.00 |
+         * | Venus      | 820 | 300 | 18500 | 1.30             | 148 | Nose laser bar, ATK - DEF, 600 ms (420 ms armored) | 9 s reinforced armor and twin non-continuous laser cannons | Base x1.00 |
          *
          * Standard baseline values for future aircraft:
          * | ATK | DEF | HP    | Skill multiplier | SPD   |
@@ -106,6 +106,7 @@ public class JetBattleGame {
         private static final int BLUE_BURST_ROUND_COOLDOWN = 850;
         private static final int BLUE_BURST_SHOTS_PER_ROUND = 4;
         private static final int VENUS_ATTACK_COOLDOWN = 600;
+        private static final int VENUS_ENHANCED_ATTACK_COOLDOWN = 420;
         private static final int AI_ATTACK_INTERVAL = 900;
         private static final int FIGHTER_SIZE = 34;
         private static final int ARENA_LEFT = 70;
@@ -120,8 +121,8 @@ public class JetBattleGame {
         private static final double BLUE_GLOW_PROJECTILE_SPEED = 760;
         private static final double MISSILE_PROJECTILE_SPEED = 430;
         private static final double HOMING_PROJECTILE_SPEED = 430;
-        private static final double TAIL_FLAME_SKILL_MISSILE_INITIAL_SPEED = 240;
-        private static final double TAIL_FLAME_SKILL_MISSILE_MAX_SPEED = 560;
+        private static final double TAIL_FLAME_SKILL_MISSILE_INITIAL_SPEED = 190;
+        private static final double TAIL_FLAME_SKILL_MISSILE_MAX_SPEED = 640;
         private static final double TAIL_FLAME_SKILL_MISSILE_ACCELERATION = 420;
         private static final double BLUE_INITIAL_BURST_MULTIPLIER = 1.2;
         private static final double BLUE_BURST_MULTIPLIER_DROP = 0.05;
@@ -681,8 +682,12 @@ public class JetBattleGame {
         private void updateActiveArmors(double seconds) {
             red.updateArmors(seconds);
             blue.updateArmors(seconds);
+            boolean aiVenusArmorWasActive = venusArmorActive(red);
             red.updateVenusArmor(seconds);
             blue.updateVenusArmor(seconds);
+            if (aiVenusArmorWasActive != venusArmorActive(red)) {
+                configureAiAttackTimer();
+            }
         }
 
         private void updateFloatingTexts(double seconds) {
@@ -867,6 +872,9 @@ public class JetBattleGame {
             fighter.venusGateRemaining = VENUS_GATE_DURATION;
             fighter.venusArmorRemaining = VENUS_ARMOR_DURATION;
             fighter.venusArmorHp = VENUS_ARMOR_HP;
+            if (fighter == red) {
+                configureAiAttackTimer();
+            }
             playSkillSound();
             message = fighterDisplayName(fighter) + " opened a star gate and began armor assembly.";
         }
@@ -1552,12 +1560,9 @@ public class JetBattleGame {
             red.applyAircraft(aiAircraft);
             red.attack = difficulty.aiAttack;
             red.speed = difficulty.aiSpeed;
-            int minimumAiInterval = aiAircraft == Aircraft.TAIL_FLAME ? TAIL_FLAME_ATTACK_COOLDOWN : NORMAL_ATTACK_COOLDOWN;
-            int aiInterval = Math.max(minimumAiInterval, difficulty.aiAttackInterval);
-            aiTimer.setDelay(aiInterval);
-            aiTimer.setInitialDelay(aiInterval);
             red.reset();
             blue.reset();
+            configureAiAttackTimer();
             projectiles.clear();
             shieldPickups.clear();
             floatingTexts.clear();
@@ -1603,6 +1608,16 @@ public class JetBattleGame {
             aiTimer.restart();
             musicTimer.restart();
             repaint();
+        }
+
+        private void configureAiAttackTimer() {
+            int minimumAiInterval = aiAircraft == Aircraft.TAIL_FLAME ? TAIL_FLAME_ATTACK_COOLDOWN : NORMAL_ATTACK_COOLDOWN;
+            int aiInterval = Math.max(minimumAiInterval, difficulty.aiAttackInterval);
+            if (aiAircraft == Aircraft.VENUS && venusArmorActive(red)) {
+                aiInterval = Math.max(VENUS_ENHANCED_ATTACK_COOLDOWN, difficulty.aiAttackInterval - 250);
+            }
+            aiTimer.setDelay(aiInterval);
+            aiTimer.setInitialDelay(aiInterval);
         }
 
         private Aircraft randomAiAircraft() {
@@ -2878,8 +2893,9 @@ public class JetBattleGame {
                 leftMouseDown = false;
                 long now = System.currentTimeMillis();
                 if (now >= nextPlayerNormalAttackTime) {
+                    boolean enhanced = venusArmorActive(blue);
                     fireVenusShot(blue, red, targetX, targetY, true);
-                    nextPlayerNormalAttackTime = now + VENUS_ATTACK_COOLDOWN;
+                    nextPlayerNormalAttackTime = now + (enhanced ? VENUS_ENHANCED_ATTACK_COOLDOWN : VENUS_ATTACK_COOLDOWN);
                 }
             } else {
                 leftMouseDown = false;
@@ -3563,16 +3579,16 @@ public class JetBattleGame {
                         ? new String[]{"每 600ms 发射非连续激光球", "命中时拥有较高技能充能效率"}
                         : new String[]{"Laser orb every 600 ms", "Hits provide strong skill charge"};
                 case VENUS -> chinese
-                        ? new String[]{"机头每 600ms 发射长条激光", "强化后双侧炮口同时交汇射击"}
-                        : new String[]{"Nose laser bar every 600 ms", "Armor mode fires converging twin beams"};
+                        ? new String[]{"机头每 600ms 发射长条激光", "强化双炮间隔缩短至 420ms"}
+                        : new String[]{"Nose laser bar every 600 ms", "Twin cannons fire every 420 ms"};
             };
         }
 
         private String[] skillDetails(boolean chinese) {
             return switch (this) {
                 case TAIL_FLAME -> chinese
-                        ? new String[]{"满充能从双翼发射六枚导弹", "导弹会加速并持续追踪目标"}
-                        : new String[]{"Launches six missiles from both wings", "Missiles accelerate and track targets"};
+                        ? new String[]{"满充能从双翼发射六枚导弹", "初速较低，持续加速至更高极速"}
+                        : new String[]{"Launches six missiles from both wings", "Low initial speed, accelerating to high max"};
                 case BLUE_GLOW -> chinese
                         ? new String[]{"短暂蓄力后持续照射 3 秒", "连续光束按秒造成高额伤害"}
                         : new String[]{"Brief windup, then a 3-second beam", "Continuous beam deals damage over time"};

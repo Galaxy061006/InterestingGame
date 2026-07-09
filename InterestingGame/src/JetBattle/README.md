@@ -73,6 +73,10 @@ The settings panel supports language switching, volume adjustment, and key rebin
 
 `Venus` opens a star gate behind the aircraft, with armor pieces emerging and attaching to the body. Once assembled, the 9-second mode boosts attack, defense, and speed and grants 1600 armor HP while leaving the skill multiplier unchanged. Its weapons become twin laser cannons that fire two converging non-continuous beams toward the cursor.
 
+金星强化期间的攻击间隔会从 `600ms` 缩短到 `420ms`。尾焰技能导弹采用较低初速与更高极速，发射后会呈现更明显的持续加速过程。
+
+During Venus's reinforced mode, its attack interval is reduced from `600ms` to `420ms`. Tail Flame's skill missiles now launch more slowly but accelerate to a higher maximum speed.
+
 ## 自定义战机 / Custom Aircraft
 
 欢迎玩家自行设计新的角色或战机，并将它们加入到游戏中。可以从战机名称、颜色、生命值、攻击力、防御力、速度、普通攻击和技能效果等方面进行设计。
