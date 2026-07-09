@@ -1566,6 +1566,7 @@ public class JetBattleGame {
         }
 
         private void startBattle(Difficulty selectedDifficulty) {
+            audio.setPaused(false);
             difficulty = selectedDifficulty;
             playerAircraft = playerAircraftConfirmed ? Aircraft.values()[selectedAircraftIndex] : randomAiAircraft();
             aiAircraft = aiAircraftConfirmed ? Aircraft.values()[selectedAiAircraftIndex] : randomAiAircraft();
@@ -1639,6 +1640,7 @@ public class JetBattleGame {
         }
 
         private void showDifficultySelection() {
+            audio.setPaused(false);
             red.reset();
             blue.reset();
             projectiles.clear();
@@ -1778,6 +1780,7 @@ public class JetBattleGame {
 
         private void togglePause() {
             paused = !paused;
+            audio.setPaused(paused);
             pressedKeys.clear();
             if (paused) {
                 aiTimer.stop();
@@ -3386,6 +3389,7 @@ public class JetBattleGame {
         private final LinkedBlockingQueue<Tone> queue = new LinkedBlockingQueue<>(96);
         private final AtomicLong sequence = new AtomicLong();
         private volatile double volume = 0.55;
+        private volatile boolean paused;
 
         private AudioEngine() {
             Thread thread = new Thread(this::runAudioLoop, "JetBattle-Audio");
@@ -3395,6 +3399,12 @@ public class JetBattleGame {
 
         private void setVolume(double volume) {
             this.volume = Math.max(0, Math.min(1, volume));
+        }
+
+        private void setPaused(boolean paused) {
+            this.paused = paused;
+            sequence.incrementAndGet();
+            queue.clear();
         }
 
         private void beginImmediateSequence() {
@@ -3407,7 +3417,7 @@ public class JetBattleGame {
         }
 
         private void playSweep(double startFrequency, double endFrequency, int durationMs, double gain, double harmonicMix) {
-            if (volume <= 0 || durationMs <= 0 || startFrequency <= 0 || endFrequency <= 0) {
+            if (paused || volume <= 0 || durationMs <= 0 || startFrequency <= 0 || endFrequency <= 0) {
                 return;
             }
             Tone tone = new Tone(startFrequency, endFrequency, durationMs, gain, harmonicMix, sequence.get());
@@ -3424,6 +3434,10 @@ public class JetBattleGame {
                 line.open(format, (int) SAMPLE_RATE / 2);
                 line.start();
                 while (true) {
+                    if (paused) {
+                        writeSilence(line, 16);
+                        continue;
+                    }
                     Tone tone = queue.poll(120, TimeUnit.MILLISECONDS);
                     if (tone == STOP) {
                         break;
@@ -3464,7 +3478,7 @@ public class JetBattleGame {
             int offset = 0;
             int chunkBytes = 512;
             while (offset < data.length) {
-                if (tone.sequence != sequence.get()) {
+                if (paused || tone.sequence != sequence.get()) {
                     line.flush();
                     return;
                 }
