@@ -63,15 +63,15 @@ The settings panel supports language switching, volume adjustment, and key rebin
 | Tail Flame | 防御较高，导弹追踪能力强 / Higher defense with strong homing missiles | 追踪导弹 / Homing missile | 六发追踪导弹 / Six homing missiles |
 | Blue Glow | 攻击和速度较高，适合持续压制 / Higher attack and speed, good for pressure | 双翼射击 / Twin wing shots | 持续蓝色激光 / Continuous blue laser |
 | Neutron Star | 生命和防御较高，偏控制 / Higher HP and defense, control-focused | 紫色非连续激光球 / Purple non-continuous laser orb | 慢速奇点光球 / Slow singularity orb |
-| Venus | 属性均衡，可通过装甲模式强化攻防 / Balanced stats with an armor-enhancement mode | 金色脉冲 / Golden pulse | 星门强化装甲 / Star-gate reinforced armor |
+| Venus | 属性均衡，可通过装甲模式强化攻防与速度 / Balanced stats with boosted offense, defense, and speed in armor mode | 机头长条激光 / Nose laser bar | 星门强化装甲 / Star-gate reinforced armor |
 
 `Blue Glow` 可以按 `C` 在单发模式和爆发模式之间切换。爆发模式会快速打出一轮攻击，但每轮存在冷却，并且连发倍率会逐步降低。
 
 `Blue Glow` can press `C` to switch between single-shot mode and burst mode. Burst mode fires a fast attack round, but each round has a cooldown and its burst multiplier gradually decreases.
 
-`Venus` 会在机身后方开启星门，并装备持续 9 秒的强化装甲。装甲期间受到的伤害降低 18%，普通脉冲会替换为强化非连续激光攻击。
+`Venus` 会在机身后方开启星门，装甲组件从星门中飞出并与机体结合。装甲完成后持续 9 秒，攻击、防御和速度得到提升，并获得 1600 点额外装甲耐久；技能倍率保持不变。此时武器切换为两侧激光炮，每次点按会向光标交汇发射两束非连续激光。
 
-`Venus` opens a star gate behind the aircraft and equips reinforced armor for 9 seconds. During this period it takes 18% less damage and replaces its normal pulse with an enhanced non-continuous laser attack.
+`Venus` opens a star gate behind the aircraft, with armor pieces emerging and attaching to the body. Once assembled, the 9-second mode boosts attack, defense, and speed and grants 1600 armor HP while leaving the skill multiplier unchanged. Its weapons become twin laser cannons that fire two converging non-continuous beams toward the cursor.
 
 ## 自定义战机 / Custom Aircraft
 
