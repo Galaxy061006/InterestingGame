@@ -58,6 +58,7 @@ public class JetBattleGame {
          * | Tail Flame | 720 | 400 | 18000 | 1.40             | 145 | Missile, ATK - DEF, 700 ms     | 6 missiles, ATK / 6 * skill multiplier    | Base x1.00        |
          * | Blue Glow  | 960 | 200 | 19000 | 1.55             | 155 | Bullet, ATK * 0.5, 400 ms      | Continuous laser, ATK * 0.7 * skill / sec | Base x1.05        |
          * | Neutron Star | 700 | 460 | 22000 | 1.50           | 140 | Non-continuous laser orb, ATK - DEF, 600 ms | Slow singularity orb, random final ammo type | Base x1.20 + hit recovery |
+         * | Venus      | 820 | 300 | 18500 | 1.30             | 148 | Golden pulse, ATK - DEF, 600 ms | 9 s reinforced armor and enhanced non-continuous laser | Base x1.00 |
          *
          * Standard baseline values for future aircraft:
          * | ATK | DEF | HP    | Skill multiplier | SPD   |
@@ -104,6 +105,7 @@ public class JetBattleGame {
         private static final int BLUE_FIRE_INTERVAL = 140;
         private static final int BLUE_BURST_ROUND_COOLDOWN = 850;
         private static final int BLUE_BURST_SHOTS_PER_ROUND = 4;
+        private static final int VENUS_ATTACK_COOLDOWN = 600;
         private static final int AI_ATTACK_INTERVAL = 900;
         private static final int FIGHTER_SIZE = 34;
         private static final int ARENA_LEFT = 70;
@@ -140,6 +142,10 @@ public class JetBattleGame {
         private static final double NEUTRON_ORB_DEFLECT_RADIUS = 150;
         private static final double NEUTRON_ORB_DEFLECT_STRENGTH = 5.2;
         private static final double NEUTRON_NORMAL_ORB_RADIUS = 8;
+        private static final double VENUS_GATE_DURATION = 0.8;
+        private static final double VENUS_ARMOR_DURATION = 9.0;
+        private static final double VENUS_ARMOR_DAMAGE_MULTIPLIER = 0.82;
+        private static final double VENUS_ENHANCED_ATTACK_MULTIPLIER = 0.78;
         private static final double SHIELD_DURATION = 8.0;
         private static final double SHIELD_SPAWN_INTERVAL = 5.5;
         private static final double SHIELD_PICKUP_RADIUS = 34.0;
@@ -498,7 +504,7 @@ public class JetBattleGame {
             return switch (aircraft) {
                 case BLUE_GLOW -> BLUE_CHARGE_MULTIPLIER;
                 case NEUTRON_STAR -> NEUTRON_CHARGE_MULTIPLIER;
-                case TAIL_FLAME -> 1.0;
+                case TAIL_FLAME, VENUS -> 1.0;
             };
         }
 
@@ -672,6 +678,8 @@ public class JetBattleGame {
         private void updateActiveArmors(double seconds) {
             red.updateArmors(seconds);
             blue.updateArmors(seconds);
+            red.updateVenusArmor(seconds);
+            blue.updateVenusArmor(seconds);
         }
 
         private void updateFloatingTexts(double seconds) {
@@ -755,6 +763,8 @@ public class JetBattleGame {
                 playerNeutronSkillTargetY = targetY;
                 playSkillSound();
                 message = fighterDisplayName(blue) + " is compressing a neutron orb.";
+            } else if (playerAircraft == Aircraft.VENUS) {
+                activateVenusArmor(blue);
             } else {
                 int damage = tailFlameMissileDamage(blue);
                 fireTailFlameWingMissiles(blue, red, mouseX, mouseY, damage);
@@ -810,6 +820,14 @@ public class JetBattleGame {
                     fireNeutronStarShot(red, blue, blue.x, blue.y, false);
                     message = fighterDisplayName(red) + " AI fired a neutron shot.";
                 }
+            } else if (aiAircraft == Aircraft.VENUS) {
+                if (red.charge >= MAX_CHARGE) {
+                    red.charge = 0;
+                    red.chargeCarry = 0;
+                    activateVenusArmor(red);
+                } else {
+                    fireVenusShot(red, blue, blue.x, blue.y, false);
+                }
             } else if (red.charge >= MAX_CHARGE) {
                 int damage = tailFlameMissileDamage(red);
                 red.charge = 0;
@@ -840,6 +858,42 @@ public class JetBattleGame {
                     fighterDisplayName(fromPlayer ? blue : red) + " neutron shot hit for " + damage + " damage.",
                     1.0, AmmoType.LASER, LaserType.NON_CONTINUOUS);
             message = fighterDisplayName(fromPlayer ? blue : red) + " fired a neutron shot.";
+        }
+
+        private void activateVenusArmor(Fighter fighter) {
+            fighter.venusGateRemaining = VENUS_GATE_DURATION;
+            fighter.venusArmorRemaining = VENUS_ARMOR_DURATION;
+            playSkillSound();
+            message = fighterDisplayName(fighter) + " opened a star gate and equipped reinforced armor.";
+        }
+
+        private void fireVenusShot(Fighter attacker, Fighter target, double targetX, double targetY, boolean fromPlayer) {
+            boolean enhanced = attacker.venusArmorRemaining > 0 && attacker.venusGateRemaining <= 0;
+            int damage;
+            AmmoType ammoType;
+            LaserType laserType;
+            if (enhanced) {
+                damage = Math.max(1, (int) Math.round(
+                        attacker.attack * VENUS_ENHANCED_ATTACK_MULTIPLIER * attacker.skillBonus - target.defense * 0.25));
+                ammoType = AmmoType.LASER;
+                laserType = LaserType.NON_CONTINUOUS;
+            } else {
+                damage = normalDamage(attacker, target);
+                ammoType = AmmoType.BULLET;
+                laserType = LaserType.NONE;
+            }
+
+            playFireSound(ammoType);
+            double angle = Math.atan2(targetY - attacker.y, targetX - attacker.x);
+            Point2D nose = transformPoint(attacker.x, attacker.y, angle, 30, 0);
+            String attackName = enhanced ? text("金星强化光束", "Venus enhanced beam") : text("金星脉冲", "Venus pulse");
+            fireProjectileFrom(nose.x, nose.y, attacker, targetX, targetY, damage, enhanced, false, false, 0, target,
+                    aircraftFor(attacker).color,
+                    attackName + " hit for " + damage + " damage.",
+                    enhanced ? 0.8 : 1.0, ammoType, laserType);
+            message = fighterDisplayName(fromPlayer ? blue : red) + (enhanced
+                    ? " fired an enhanced non-continuous laser."
+                    : " fired a golden pulse.");
         }
 
         private void fireNeutronStarSkillOrb(Fighter attacker, Fighter target, double targetX, double targetY) {
@@ -1277,7 +1331,20 @@ public class JetBattleGame {
                 return;
             }
             int finalDamage = applyArmorReduction(target, damage, ammoType, laserType);
+            if (target.venusArmorRemaining > 0) {
+                finalDamage = Math.max(1, (int) Math.round(finalDamage * VENUS_ARMOR_DAMAGE_MULTIPLIER));
+                showVenusArmorReaction(target);
+            }
             target.hp = Math.max(0, target.hp - finalDamage);
+        }
+
+        private void showVenusArmorReaction(Fighter target) {
+            long now = System.currentTimeMillis();
+            if (now < target.nextArmorTextAt) {
+                return;
+            }
+            target.nextArmorTextAt = now + 350;
+            showFloatingText(target.x, target.y - 46, text("强化装甲", "Reinforced"), new Color(255, 205, 74));
         }
 
         private int applyArmorReduction(Fighter target, int damage, AmmoType ammoType, LaserType laserType) {
@@ -2123,17 +2190,17 @@ public class JetBattleGame {
                 if (aiSelected && aiAircraftConfirmed) {
                     drawAircraftConfirmEffect(g, cardX, y, cardW, aiAircraftConfirmedAt, new Color(255, 169, 74));
                 }
-                drawFutureJet(g, cardX + 42, y + 55, 0, option.color, "");
-                g.setFont(new Font("SansSerif", Font.BOLD, aircraft.length > 2 ? 16 : 20));
+                drawFutureJet(g, cardX + cardW / 2.0, y + 43, 0, option.color, "");
+                g.setFont(new Font("SansSerif", Font.BOLD, aircraft.length >= 4 ? 14 : 16));
                 g.setColor(Color.WHITE);
-                g.drawString(option.displayName(chinese), cardX + 78, y + 48);
-                g.setFont(new Font("SansSerif", Font.PLAIN, 14));
+                drawCenteredTextInBox(g, option.displayName(chinese), cardX, cardW, y + 82);
+                g.setFont(new Font("SansSerif", Font.PLAIN, 12));
                 g.setColor(new Color(180, 192, 210));
                 String roleText = playerSelected && aiSelected ? aircraftRoleText("P1", playerAircraftConfirmed) + " / " + aircraftRoleText("AI", aiAircraftConfirmed)
                         : playerSelected ? aircraftRoleText("P1", playerAircraftConfirmed)
                         : aiSelected ? aircraftRoleText("AI", aiAircraftConfirmed)
                         : text("可选", "Available");
-                g.drawString(roleText, cardX + 78, y + 76);
+                drawCenteredTextInBox(g, roleText, cardX, cardW, y + 103);
             }
             return y + 120;
         }
@@ -2350,7 +2417,47 @@ public class JetBattleGame {
             double targetY = fighter == blue ? mouseY : blue.y;
             double angle = Math.atan2(targetY - fighter.y, targetX - fighter.x);
             drawActiveArmorEffects(g, fighter);
+            if (aircraftFor(fighter) == Aircraft.VENUS && fighter.venusGateRemaining > 0) {
+                drawVenusStarGate(g, fighter, angle);
+            }
             drawFutureJet(g, fighter.x, fighter.y, angle, mainColor, fighter == blue ? "P" : "AI", fighter.boosting);
+            if (aircraftFor(fighter) == Aircraft.VENUS && fighter.venusArmorRemaining > 0) {
+                drawVenusReinforcedArmor(g, fighter, angle);
+            }
+        }
+
+        private void drawVenusStarGate(Graphics2D g, Fighter fighter, double angle) {
+            double progress = 1.0 - fighter.venusGateRemaining / VENUS_GATE_DURATION;
+            double gateX = fighter.x - Math.cos(angle) * 48;
+            double gateY = fighter.y - Math.sin(angle) * 48;
+            int radius = 20 + (int) Math.round(Math.sin(progress * Math.PI) * 18);
+            Graphics2D gate = (Graphics2D) g.create();
+            gate.translate(gateX, gateY);
+            gate.rotate(angle + progress * Math.PI * 2.0);
+            gate.setColor(new Color(255, 205, 74, 60));
+            gate.fillOval(-radius, -radius, radius * 2, radius * 2);
+            gate.setColor(new Color(255, 226, 126, 225));
+            gate.setStroke(new BasicStroke(3f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            gate.drawArc(-radius, -radius, radius * 2, radius * 2, 10, 125);
+            gate.drawArc(-radius, -radius, radius * 2, radius * 2, 190, 125);
+            gate.setColor(Color.WHITE);
+            gate.setStroke(new BasicStroke(1.4f));
+            gate.drawOval(-radius / 2, -radius / 2, radius, radius);
+            gate.dispose();
+        }
+
+        private void drawVenusReinforcedArmor(Graphics2D g, Fighter fighter, double angle) {
+            Graphics2D armor = (Graphics2D) g.create();
+            armor.translate(fighter.x, fighter.y);
+            armor.rotate(angle);
+            armor.setColor(new Color(255, 210, 80, 205));
+            armor.setStroke(new BasicStroke(2.6f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            armor.drawLine(-14, -13, 7, -15);
+            armor.drawLine(-14, 13, 7, 15);
+            armor.drawRoundRect(-18, -8, 34, 16, 8, 8);
+            armor.setColor(new Color(255, 244, 190, 180));
+            armor.fillOval(10, -4, 9, 8);
+            armor.dispose();
         }
 
         private void drawActiveArmorEffects(Graphics2D g, Fighter fighter) {
@@ -2469,6 +2576,10 @@ public class JetBattleGame {
                 g.setFont(new Font("SansSerif", Font.PLAIN, 12));
                 g.setColor(new Color(190, 207, 226));
                 g.drawString("Mode " + (blueBurstMode ? "Burst" : "Single") + " (C)", x + 18, y + 176);
+            } else if (aircraftFor(fighter) == Aircraft.VENUS && fighter.venusArmorRemaining > 0) {
+                g.setFont(new Font("SansSerif", Font.PLAIN, 12));
+                g.setColor(new Color(255, 214, 96));
+                g.drawString(String.format("Armor %.1fs", fighter.venusArmorRemaining), x + 18, y + 176);
             }
         }
 
@@ -2645,6 +2756,13 @@ public class JetBattleGame {
                 if (now >= nextPlayerNormalAttackTime) {
                     fireNeutronStarShot(blue, red, targetX, targetY, true);
                     nextPlayerNormalAttackTime = now + NORMAL_ATTACK_COOLDOWN;
+                }
+            } else if (playerAircraft == Aircraft.VENUS) {
+                leftMouseDown = false;
+                long now = System.currentTimeMillis();
+                if (now >= nextPlayerNormalAttackTime) {
+                    fireVenusShot(blue, red, targetX, targetY, true);
+                    nextPlayerNormalAttackTime = now + VENUS_ATTACK_COOLDOWN;
                 }
             } else {
                 leftMouseDown = false;
@@ -3047,6 +3165,9 @@ public class JetBattleGame {
                             selectedDifficultyIndex = 2;
                         }
                         repaint();
+                    } else if (key == KeyEvent.VK_4 && selectedMenuSection == 0 && aircraft.length > 3) {
+                        selectedAircraftIndex = 3;
+                        repaint();
                     } else if (key == KeyEvent.VK_ENTER) {
                         if (selectedMenuSection == 0) {
                             aircraftMenuOpen = !aircraftMenuOpen;
@@ -3259,7 +3380,8 @@ public class JetBattleGame {
     private enum Aircraft {
         TAIL_FLAME("Tail Flame", "尾焰", new Color(210, 65, 62), 720, 400, 18000, 1.4, 145),
         BLUE_GLOW("Blue Glow", "蓝光", new Color(70, 133, 232), 960, 200, 19000, 1.55, 155),
-        NEUTRON_STAR("Neutron Star", "中子星", new Color(150, 85, 225), 700, 460, 22000, 1.5, 140);
+        NEUTRON_STAR("Neutron Star", "中子星", new Color(150, 85, 225), 700, 460, 22000, 1.5, 140),
+        VENUS("Venus", "金星", new Color(232, 181, 52), 820, 300, 18500, 1.3, 148);
 
         private final String name;
         private final String zhName;
@@ -3290,6 +3412,7 @@ public class JetBattleGame {
                 case TAIL_FLAME -> chinese ? "追踪导弹" : "Homing missile";
                 case BLUE_GLOW -> chinese ? "双翼弹药" : "Twin wing shots";
                 case NEUTRON_STAR -> chinese ? "紫色非连续激光光球" : "Purple non-continuous laser orb";
+                case VENUS -> chinese ? "金色脉冲弹" : "Golden pulse";
             };
         }
 
@@ -3298,6 +3421,7 @@ public class JetBattleGame {
                 case TAIL_FLAME -> chinese ? "六枚追踪导弹" : "Six homing missiles";
                 case BLUE_GLOW -> chinese ? "连续型蓝色激光" : "Continuous blue laser";
                 case NEUTRON_STAR -> chinese ? "慢速奇点光球" : "Slow singularity orb";
+                case VENUS -> chinese ? "星门强化装甲" : "Star-gate reinforced armor";
             };
         }
 
@@ -3306,6 +3430,7 @@ public class JetBattleGame {
                 case TAIL_FLAME -> chinese ? "定位：高防御追踪导弹突击机" : "ROLE: Armored homing-missile striker";
                 case BLUE_GLOW -> chinese ? "定位：高速持续火力压制机" : "ROLE: High-speed sustained-fire fighter";
                 case NEUTRON_STAR -> chinese ? "定位：重装奇点控制机" : "ROLE: Armored singularity controller";
+                case VENUS -> chinese ? "定位：均衡型装甲强化战机" : "ROLE: Balanced armor-enhancement fighter";
             };
         }
 
@@ -3320,6 +3445,9 @@ public class JetBattleGame {
                 case NEUTRON_STAR -> chinese
                         ? new String[]{"每 600ms 发射非连续激光球", "命中时拥有较高技能充能效率"}
                         : new String[]{"Laser orb every 600 ms", "Hits provide strong skill charge"};
+                case VENUS -> chinese
+                        ? new String[]{"每 600ms 发射金色脉冲弹", "强化后改为非连续光束激光"}
+                        : new String[]{"Golden pulse every 600 ms", "Armor mode fires non-continuous beams"};
             };
         }
 
@@ -3334,6 +3462,9 @@ public class JetBattleGame {
                 case NEUTRON_STAR -> chinese
                         ? new String[]{"发射慢速奇点光球牵引目标", "可偏转弹药，并弧形偏转光束"}
                         : new String[]{"Slow singularity orb pulls targets", "Deflects projectiles and curves beams"};
+                case VENUS -> chinese
+                        ? new String[]{"后方星门召唤强化装甲 9 秒", "获得 18% 减伤与强化激光攻击"}
+                        : new String[]{"Star gate equips armor for 9 seconds", "Grants 18% reduction and beam attacks"};
             };
         }
 
@@ -3348,6 +3479,9 @@ public class JetBattleGame {
                 case NEUTRON_STAR -> chinese
                         ? new String[]{"预判敌方路线释放奇点光球", "控制战场中心并干扰敌方火力"}
                         : new String[]{"Lead targets with the singularity orb", "Control center and disrupt enemy fire"};
+                case VENUS -> chinese
+                        ? new String[]{"技能前稳步换血并积攒充能", "装甲期间主动压制并保持命中"}
+                        : new String[]{"Trade steadily while charging skill", "Press the attack while armor is active"};
             };
         }
     }
@@ -3419,6 +3553,8 @@ public class JetBattleGame {
         private double neutronOrbitAngle;
         private double neutronOrbitRadius;
         private double neutronPullChargeCarry;
+        private double venusGateRemaining;
+        private double venusArmorRemaining;
         private double boostEnergy;
         private double boostRecoverDelay;
         private boolean boosting;
@@ -3453,6 +3589,8 @@ public class JetBattleGame {
             neutronOrbitAngle = 0;
             neutronOrbitRadius = 0;
             neutronPullChargeCarry = 0;
+            venusGateRemaining = 0;
+            venusArmorRemaining = 0;
             boostEnergy = BattlePanel.BOOST_MAX_ENERGY;
             boostRecoverDelay = 0;
             boosting = false;
@@ -3482,6 +3620,11 @@ public class JetBattleGame {
                     activeArmors.put(armorType, remaining);
                 }
             }
+        }
+
+        private void updateVenusArmor(double seconds) {
+            venusGateRemaining = Math.max(0, venusGateRemaining - seconds);
+            venusArmorRemaining = Math.max(0, venusArmorRemaining - seconds);
         }
     }
 
