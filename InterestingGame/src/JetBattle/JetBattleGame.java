@@ -1781,22 +1781,39 @@ public class JetBattleGame {
             g.setColor(Color.WHITE);
             g.drawString(aircraft.displayName(chinese), x, y);
 
-            g.setFont(new Font("SansSerif", Font.PLAIN, 15));
+            g.setFont(new Font("SansSerif", Font.BOLD, 13));
+            g.setColor(aircraft.color);
+            drawClippedString(g, aircraft.roleDescription(chinese), x, y + 27, 248);
+
+            g.setFont(new Font("SansSerif", Font.PLAIN, 12));
             g.setColor(new Color(220, 228, 240));
-            int lineY = y + 42;
-            String[] lines = {
-                    attr("attack") + " " + aircraft.attack,
-                    attr("defense") + " " + aircraft.defense,
-                    attr("hp") + " " + aircraft.maxHp,
-                    attr("skill") + " x" + aircraft.skillBonus,
-                    attr("speed") + " " + aircraft.speed,
-                    text("普攻: ", "Normal: ") + aircraft.normalDescription(chinese),
-                    text("技能: ", "Skill: ") + aircraft.skillDescription(chinese)
-            };
+            drawClippedString(g, attr("attack") + " " + aircraft.attack + "   "
+                    + attr("defense") + " " + aircraft.defense + "   "
+                    + attr("hp") + " " + aircraft.maxHp, x, y + 53, 248);
+            drawClippedString(g, attr("speed") + " " + aircraft.speed + "   "
+                    + attr("skill") + " x" + aircraft.skillBonus, x, y + 73, 248);
+
+            int sectionY = y + 103;
+            sectionY = drawAircraftInfoSection(g, text("普通攻击", "NORMAL ATTACK"), aircraft.normalDetails(chinese), x, sectionY, aircraft.color);
+            sectionY = drawAircraftInfoSection(g, text("主动技能", "ACTIVE SKILL"), aircraft.skillDetails(chinese), x, sectionY + 4, aircraft.color);
+            drawAircraftInfoSection(g, text("作战建议", "COMBAT TIPS"), aircraft.combatTips(chinese), x, sectionY + 4, aircraft.color);
+        }
+
+        private int drawAircraftInfoSection(Graphics2D g, String title, String[] lines, int x, int y, Color accent) {
+            g.setColor(new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 75));
+            g.fillRoundRect(x, y - 15, 248, 22, 6, 6);
+            g.setFont(new Font("SansSerif", Font.BOLD, 12));
+            g.setColor(new Color(236, 242, 252));
+            g.drawString(title, x + 8, y);
+
+            int lineY = y + 23;
+            g.setFont(new Font("SansSerif", Font.PLAIN, 12));
+            g.setColor(new Color(198, 211, 229));
             for (String line : lines) {
-                drawClippedString(g, line, x, lineY, 248);
-                lineY += 32;
+                drawClippedString(g, line, x + 4, lineY, 240);
+                lineY += 19;
             }
+            return lineY;
         }
 
         private String attr(String key) {
@@ -3281,6 +3298,56 @@ public class JetBattleGame {
                 case TAIL_FLAME -> chinese ? "六枚追踪导弹" : "Six homing missiles";
                 case BLUE_GLOW -> chinese ? "连续型蓝色激光" : "Continuous blue laser";
                 case NEUTRON_STAR -> chinese ? "慢速奇点光球" : "Slow singularity orb";
+            };
+        }
+
+        private String roleDescription(boolean chinese) {
+            return switch (this) {
+                case TAIL_FLAME -> chinese ? "定位：高防御追踪导弹突击机" : "ROLE: Armored homing-missile striker";
+                case BLUE_GLOW -> chinese ? "定位：高速持续火力压制机" : "ROLE: High-speed sustained-fire fighter";
+                case NEUTRON_STAR -> chinese ? "定位：重装奇点控制机" : "ROLE: Armored singularity controller";
+            };
+        }
+
+        private String[] normalDetails(boolean chinese) {
+            return switch (this) {
+                case TAIL_FLAME -> chinese
+                        ? new String[]{"每 700ms 发射一枚追踪导弹", "伤害按攻击减去目标防御结算"}
+                        : new String[]{"Homing missile every 700 ms", "Damage: ATK minus target DEF"};
+                case BLUE_GLOW -> chinese
+                        ? new String[]{"双翼齐射，单点间隔 400ms", "按 C 切换四连发压制模式"}
+                        : new String[]{"Twin-wing volley every 400 ms", "Press C for four-shot burst mode"};
+                case NEUTRON_STAR -> chinese
+                        ? new String[]{"每 600ms 发射非连续激光球", "命中时拥有较高技能充能效率"}
+                        : new String[]{"Laser orb every 600 ms", "Hits provide strong skill charge"};
+            };
+        }
+
+        private String[] skillDetails(boolean chinese) {
+            return switch (this) {
+                case TAIL_FLAME -> chinese
+                        ? new String[]{"满充能从双翼发射六枚导弹", "导弹会加速并持续追踪目标"}
+                        : new String[]{"Launches six missiles from both wings", "Missiles accelerate and track targets"};
+                case BLUE_GLOW -> chinese
+                        ? new String[]{"短暂蓄力后持续照射 3 秒", "连续光束按秒造成高额伤害"}
+                        : new String[]{"Brief windup, then a 3-second beam", "Continuous beam deals damage over time"};
+                case NEUTRON_STAR -> chinese
+                        ? new String[]{"发射慢速奇点光球牵引目标", "可偏转弹药，并弧形偏转光束"}
+                        : new String[]{"Slow singularity orb pulls targets", "Deflects projectiles and curves beams"};
+            };
+        }
+
+        private String[] combatTips(boolean chinese) {
+            return switch (this) {
+                case TAIL_FLAME -> chinese
+                        ? new String[]{"保持中距离，让导弹完成追踪", "利用高防御稳定换血并蓄能"}
+                        : new String[]{"Keep range so missiles can track", "Use high DEF for steady trades"};
+                case BLUE_GLOW -> chinese
+                        ? new String[]{"利用 155 速度持续走位压制", "单点稳定，连发适合快速压血"}
+                        : new String[]{"Use 155 SPD to maintain pressure", "Single is steady; burst applies pressure"};
+                case NEUTRON_STAR -> chinese
+                        ? new String[]{"预判敌方路线释放奇点光球", "控制战场中心并干扰敌方火力"}
+                        : new String[]{"Lead targets with the singularity orb", "Control center and disrupt enemy fire"};
             };
         }
     }
