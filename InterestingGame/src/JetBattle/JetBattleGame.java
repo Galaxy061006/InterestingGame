@@ -7,6 +7,7 @@ import javax.swing.Timer;
 import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.AudioSystem;
 import javax.sound.sampled.SourceDataLine;
+import javax.imageio.ImageIO;
 import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Dimension;
@@ -23,7 +24,13 @@ import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseMotionAdapter;
+import java.awt.event.MouseWheelEvent;
+import java.awt.event.MouseWheelListener;
 import java.awt.geom.QuadCurve2D;
+import java.awt.image.BufferedImage;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.HashSet;
@@ -165,6 +172,7 @@ public class JetBattleGame {
         private final Set<Integer> pressedKeys = new HashSet<>();
         private final Random random = new Random();
         private final AudioEngine audio = new AudioEngine();
+        private final EnumMap<Aircraft, BufferedImage> aircraftSprites = new EnumMap<>(Aircraft.class);
         private final JFrame frame;
         private final GraphicsDevice graphicsDevice = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
         private final Timer gameTimer = new Timer(16, event -> updateGame());
@@ -207,6 +215,8 @@ public class JetBattleGame {
         private int selectedAircraftIndex = -1;
         private int selectedAiAircraftIndex = -1;
         private int hangarAircraftIndex = 1;
+        private int aircraftScrollIndex;
+        private int hangarScrollIndex;
         private int selectedMenuSection;
         private final List<Integer> aircraftConfirmationOrder = new ArrayList<>();
         private static final int AIRCRAFT_ROLE_PLAYER = 0;
@@ -261,15 +271,71 @@ public class JetBattleGame {
 
         BattlePanel(JFrame frame) {
             this.frame = frame;
+            loadAircraftSprites();
             setPreferredSize(new Dimension(WIDTH, HEIGHT));
             setBackground(new Color(18, 20, 26));
             setFocusable(true);
             addMouseListener(new BattleMouseListener());
             addMouseMotionListener(new BattleMouseMotionListener());
+            addMouseWheelListener(new BattleMouseWheelListener());
             addKeyListener(new BattleKeyListener());
             setInputMethodLocked(true);
             gameTimer.start();
             aiTimer.stop();
+        }
+
+        private void loadAircraftSprites() {
+            for (Aircraft aircraft : Aircraft.values()) {
+                BufferedImage image = loadAircraftSprite(aircraft.spriteFile);
+                if (image != null) {
+                    aircraftSprites.put(aircraft, trimTransparentBounds(image));
+                }
+            }
+        }
+
+        private BufferedImage loadAircraftSprite(String fileName) {
+            String resourcePath = "/JetBattle/assets/" + fileName;
+            try (InputStream stream = JetBattleGame.class.getResourceAsStream(resourcePath)) {
+                if (stream != null) {
+                    return ImageIO.read(stream);
+                }
+            } catch (IOException ignored) {
+            }
+
+            File[] candidates = {
+                    new File("src/JetBattle/assets", fileName),
+                    new File("InterestingGame/src/JetBattle/assets", fileName)
+            };
+            for (File candidate : candidates) {
+                if (candidate.isFile()) {
+                    try {
+                        return ImageIO.read(candidate);
+                    } catch (IOException ignored) {
+                    }
+                }
+            }
+            return null;
+        }
+
+        private BufferedImage trimTransparentBounds(BufferedImage image) {
+            int minX = image.getWidth();
+            int minY = image.getHeight();
+            int maxX = -1;
+            int maxY = -1;
+            for (int y = 0; y < image.getHeight(); y++) {
+                for (int x = 0; x < image.getWidth(); x++) {
+                    if ((image.getRGB(x, y) >>> 24) > 20) {
+                        minX = Math.min(minX, x);
+                        minY = Math.min(minY, y);
+                        maxX = Math.max(maxX, x);
+                        maxY = Math.max(maxY, y);
+                    }
+                }
+            }
+            if (maxX < minX || maxY < minY) {
+                return image;
+            }
+            return image.getSubimage(minX, minY, maxX - minX + 1, maxY - minY + 1);
         }
 
         private void updateGame() {
@@ -1901,17 +1967,20 @@ public class JetBattleGame {
             int listW = 250;
             int rowH = 72;
             Aircraft[] aircraft = Aircraft.values();
+            int visibleCount = Math.min(3, aircraft.length);
+            hangarScrollIndex = clampScrollIndex(hangarScrollIndex, aircraft.length, visibleCount);
             g.setFont(new Font("SansSerif", Font.BOLD, 18));
-            for (int i = 0; i < aircraft.length; i++) {
+            for (int slot = 0; slot < visibleCount; slot++) {
+                int i = hangarScrollIndex + slot;
                 Aircraft option = aircraft[i];
-                int y = listY + i * (rowH + 12);
+                int y = listY + slot * (rowH + 12);
                 boolean selected = i == hangarAircraftIndex;
                 g.setColor(selected ? new Color(34, 43, 60) : new Color(22, 27, 36));
                 g.fillRoundRect(listX, y, listW, rowH, 10, 10);
                 g.setColor(selected ? option.color : new Color(82, 92, 112));
                 g.setStroke(new BasicStroke(selected ? 3f : 1.4f));
                 g.drawRoundRect(listX, y, listW, rowH, 10, 10);
-                drawFutureJet(g, listX + 42, y + 36, 0, option.color, "");
+                drawAircraftSprite(g, option, listX + 42, y + 36, 0, 74, 56, "", false);
                 g.setColor(Color.WHITE);
                 g.setFont(new Font("SansSerif", Font.BOLD, 16));
                 drawClippedString(g, option.displayName(chinese), listX + 84, y + 31, listW - 98);
@@ -1921,6 +1990,8 @@ public class JetBattleGame {
                 drawClippedString(g, stats, listX + 84, y + 55, listW - 98);
                 g.setFont(new Font("SansSerif", Font.BOLD, 18));
             }
+            drawScrollArrows(g, listX + listW - 32, listY + visibleCount * (rowH + 12) + 2,
+                    hangarScrollIndex > 0, hangarScrollIndex + visibleCount < aircraft.length);
 
             Aircraft selected = aircraft[hangarAircraftIndex];
             g.setColor(new Color(19, 24, 34));
@@ -1928,7 +1999,7 @@ public class JetBattleGame {
             g.setColor(selected.color);
             g.setStroke(new BasicStroke(2.4f));
             g.drawRoundRect(340, 116, 238, 430, 12, 12);
-            drawLargeAircraftPreview(g, 459, 320, selected.color);
+            drawLargeAircraftPreview(g, 459, 320, selected);
 
             g.setColor(new Color(19, 24, 34));
             g.fillRoundRect(606, 116, 292, 430, 12, 12);
@@ -2024,12 +2095,8 @@ public class JetBattleGame {
             g.drawString(value.substring(0, Math.max(0, end)) + ellipsis, x, y);
         }
 
-        private void drawLargeAircraftPreview(Graphics2D g, double x, double y, Color color) {
-            Graphics2D preview = (Graphics2D) g.create();
-            preview.translate(x, y);
-            preview.scale(2.4, 2.4);
-            drawFutureJet(preview, 0, 0, 0, color, "", false);
-            preview.dispose();
+        private void drawLargeAircraftPreview(Graphics2D g, double x, double y, Aircraft aircraft) {
+            drawAircraftSprite(g, aircraft, x, y, 0, 210, 300, "", false);
         }
 
         private void drawLanguageToggle(Graphics2D g) {
@@ -2270,12 +2337,17 @@ public class JetBattleGame {
 
         private int drawAircraftOptions(Graphics2D g, int x, int y, int width) {
             Aircraft[] aircraft = Aircraft.values();
-            int gap = aircraft.length > 2 ? 14 : 28;
-            int cardW = aircraft.length > 2 ? (width - gap * (aircraft.length - 1)) / aircraft.length : 238;
-            int startX = x + (width - cardW * aircraft.length - gap * (aircraft.length - 1)) / 2;
-            for (int i = 0; i < aircraft.length; i++) {
+            int visibleCount = Math.min(3, aircraft.length);
+            aircraftScrollIndex = clampScrollIndex(aircraftScrollIndex, aircraft.length, visibleCount);
+            int gap = 14;
+            int arrowSpace = aircraft.length > visibleCount ? 34 : 0;
+            int contentWidth = width - arrowSpace * 2;
+            int cardW = (contentWidth - gap * (visibleCount - 1)) / visibleCount;
+            int startX = x + arrowSpace;
+            for (int slot = 0; slot < visibleCount; slot++) {
+                int i = aircraftScrollIndex + slot;
                 Aircraft option = aircraft[i];
-                int cardX = startX + i * (cardW + gap);
+                int cardX = startX + slot * (cardW + gap);
                 boolean playerSelected = i == selectedAircraftIndex;
                 boolean aiSelected = i == selectedAiAircraftIndex;
                 g.setColor(new Color(22, 27, 36));
@@ -2295,8 +2367,8 @@ public class JetBattleGame {
                 if (aiSelected && aiAircraftConfirmed) {
                     drawAircraftConfirmEffect(g, cardX, y, cardW, aiAircraftConfirmedAt, new Color(255, 169, 74));
                 }
-                drawFutureJet(g, cardX + cardW / 2.0, y + 43, 0, option.color, "");
-                g.setFont(new Font("SansSerif", Font.BOLD, aircraft.length >= 4 ? 14 : 16));
+                drawAircraftSprite(g, option, cardX + cardW / 2.0, y + 43, 0, cardW - 14, 62, "", false);
+                g.setFont(new Font("SansSerif", Font.BOLD, 14));
                 g.setColor(Color.WHITE);
                 drawCenteredTextInBox(g, option.displayName(chinese), cardX, cardW, y + 82);
                 g.setFont(new Font("SansSerif", Font.PLAIN, 12));
@@ -2307,7 +2379,43 @@ public class JetBattleGame {
                         : text("可选", "Available");
                 drawCenteredTextInBox(g, roleText, cardX, cardW, y + 103);
             }
+            if (aircraft.length > visibleCount) {
+                drawHorizontalScrollArrow(g, x + 5, y + 40, false, aircraftScrollIndex > 0);
+                drawHorizontalScrollArrow(g, x + width - 29, y + 40, true,
+                        aircraftScrollIndex + visibleCount < aircraft.length);
+            }
             return y + 120;
+        }
+
+        private int clampScrollIndex(int index, int itemCount, int visibleCount) {
+            return Math.max(0, Math.min(index, Math.max(0, itemCount - visibleCount)));
+        }
+
+        private void drawHorizontalScrollArrow(Graphics2D g, int x, int y, boolean right, boolean enabled) {
+            g.setColor(enabled ? new Color(42, 55, 74) : new Color(28, 33, 42));
+            g.fillRoundRect(x, y, 24, 32, 7, 7);
+            g.setColor(enabled ? new Color(210, 224, 244) : new Color(82, 91, 105));
+            int direction = right ? 1 : -1;
+            int centerX = x + 12;
+            int[] xs = {centerX - direction * 4, centerX + direction * 4, centerX - direction * 4};
+            int[] ys = {y + 9, y + 16, y + 23};
+            g.fillPolygon(xs, ys, 3);
+        }
+
+        private void drawScrollArrows(Graphics2D g, int x, int y, boolean upEnabled, boolean downEnabled) {
+            drawVerticalScrollArrow(g, x - 28, y, false, upEnabled);
+            drawVerticalScrollArrow(g, x, y, true, downEnabled);
+        }
+
+        private void drawVerticalScrollArrow(Graphics2D g, int x, int y, boolean down, boolean enabled) {
+            g.setColor(enabled ? new Color(42, 55, 74) : new Color(28, 33, 42));
+            g.fillRoundRect(x, y, 24, 24, 7, 7);
+            g.setColor(enabled ? new Color(210, 224, 244) : new Color(82, 91, 105));
+            int direction = down ? 1 : -1;
+            int centerY = y + 12;
+            int[] xs = {x + 6, x + 12, x + 18};
+            int[] ys = {centerY - direction * 3, centerY + direction * 4, centerY - direction * 3};
+            g.fillPolygon(xs, ys, 3);
         }
 
         private String aircraftRoleText(String role, boolean confirmed) {
@@ -2525,7 +2633,8 @@ public class JetBattleGame {
             if (aircraftFor(fighter) == Aircraft.VENUS && fighter.venusGateRemaining > 0) {
                 drawVenusStarGate(g, fighter, angle);
             }
-            drawFutureJet(g, fighter.x, fighter.y, angle, mainColor, fighter == blue ? "P" : "AI", fighter.boosting);
+            drawAircraftSprite(g, aircraftFor(fighter), fighter.x, fighter.y, angle, 82, 64,
+                    fighter == blue ? "P" : "AI", fighter.boosting);
             if (aircraftFor(fighter) == Aircraft.VENUS && fighter.venusGateRemaining > 0) {
                 drawVenusArmorAssembly(g, fighter, angle);
             } else if (venusArmorActive(fighter)) {
@@ -2631,6 +2740,48 @@ public class JetBattleGame {
 
         private void drawFutureJet(Graphics2D g, double x, double y, double angle, Color mainColor, String label) {
             drawFutureJet(g, x, y, angle, mainColor, label, false);
+        }
+
+        private void drawAircraftSprite(Graphics2D g, Aircraft aircraft, double x, double y, double angle,
+                                        int maxWidth, int maxHeight, String label, boolean boosting) {
+            BufferedImage image = aircraftSprites.get(aircraft);
+            if (image == null) {
+                drawFutureJet(g, x, y, angle, aircraft.color, label, boosting);
+                return;
+            }
+
+            double scale = Math.min(maxWidth / (double) image.getWidth(), maxHeight / (double) image.getHeight());
+            int drawWidth = Math.max(1, (int) Math.round(image.getWidth() * scale));
+            int drawHeight = Math.max(1, (int) Math.round(image.getHeight() * scale));
+            Graphics2D jet = (Graphics2D) g.create();
+            jet.translate(x, y);
+            jet.rotate(angle);
+            jet.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+
+            if (boosting) {
+                int rearX = -drawWidth / 2 + Math.max(2, drawWidth / 18);
+                int flameLength = Math.max(22, drawWidth / 3);
+                int flameHalfHeight = Math.max(5, drawHeight / 9);
+                int[] flameX = {rearX, rearX - flameLength, rearX};
+                int[] flameY = {-flameHalfHeight, 0, flameHalfHeight};
+                jet.setColor(new Color(62, 176, 255, 155));
+                jet.fillPolygon(flameX, flameY, 3);
+                int[] coreX = {rearX, rearX - flameLength * 2 / 3, rearX};
+                int[] coreY = {-Math.max(2, flameHalfHeight / 2), 0, Math.max(2, flameHalfHeight / 2)};
+                jet.setColor(new Color(255, 244, 196, 220));
+                jet.fillPolygon(coreX, coreY, 3);
+            }
+
+            jet.drawImage(image, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight, null);
+            jet.dispose();
+
+            if (!label.isEmpty()) {
+                g.setFont(new Font("SansSerif", Font.BOLD, 12));
+                g.setColor(Color.WHITE);
+                FontMetrics metrics = g.getFontMetrics();
+                g.drawString(label, (int) (x - metrics.stringWidth(label) / 2.0),
+                        (int) y + maxHeight / 2 + 14);
+            }
         }
 
         private void drawFutureJet(Graphics2D g, double x, double y, double angle, Color mainColor, String label, boolean boosting) {
@@ -3096,11 +3247,26 @@ public class JetBattleGame {
 
             if (aircraftMenuOpen && y >= 198 && y <= 308) {
                 Aircraft[] aircraft = Aircraft.values();
-                int gap = aircraft.length > 2 ? 14 : 28;
-                int cardW = aircraft.length > 2 ? (SETUP_PANEL_WIDTH - gap * (aircraft.length - 1)) / aircraft.length : 238;
-                int startX = SETUP_PANEL_X + (SETUP_PANEL_WIDTH - cardW * aircraft.length - gap * (aircraft.length - 1)) / 2;
-                for (int i = 0; i < aircraft.length; i++) {
-                    int cardX = startX + i * (cardW + gap);
+                int visibleCount = Math.min(3, aircraft.length);
+                int gap = 14;
+                int arrowSpace = aircraft.length > visibleCount ? 34 : 0;
+                int contentWidth = SETUP_PANEL_WIDTH - arrowSpace * 2;
+                int cardW = (contentWidth - gap * (visibleCount - 1)) / visibleCount;
+                int startX = SETUP_PANEL_X + arrowSpace;
+                if (aircraft.length > visibleCount && x >= SETUP_PANEL_X + 5 && x <= SETUP_PANEL_X + 29) {
+                    aircraftScrollIndex = clampScrollIndex(aircraftScrollIndex - 1, aircraft.length, visibleCount);
+                    repaint();
+                    return;
+                }
+                if (aircraft.length > visibleCount && x >= SETUP_PANEL_X + SETUP_PANEL_WIDTH - 29
+                        && x <= SETUP_PANEL_X + SETUP_PANEL_WIDTH - 5) {
+                    aircraftScrollIndex = clampScrollIndex(aircraftScrollIndex + 1, aircraft.length, visibleCount);
+                    repaint();
+                    return;
+                }
+                for (int slot = 0; slot < visibleCount; slot++) {
+                    int i = aircraftScrollIndex + slot;
+                    int cardX = startX + slot * (cardW + gap);
                     if (x >= cardX && x <= cardX + cardW) {
                         selectSetupAircraft(i, clickCount >= 2);
                         selectedMenuSection = 0;
@@ -3135,6 +3301,7 @@ public class JetBattleGame {
             if (x >= HANGAR_BUTTON_X && x <= HANGAR_BUTTON_X + HANGAR_BUTTON_WIDTH && y >= 646 && y <= 676) {
                 showingHangar = true;
                 hangarAircraftIndex = selectedAircraftIndex >= 0 ? selectedAircraftIndex : 0;
+                ensureHangarAircraftVisible();
                 repaint();
             }
         }
@@ -3156,6 +3323,26 @@ public class JetBattleGame {
                     confirmSetupAircraft(AIRCRAFT_ROLE_AI);
                 }
             }
+        }
+
+        private void ensureAircraftVisible(int aircraftIndex) {
+            int visibleCount = Math.min(3, Aircraft.values().length);
+            if (aircraftIndex < aircraftScrollIndex) {
+                aircraftScrollIndex = aircraftIndex;
+            } else if (aircraftIndex >= aircraftScrollIndex + visibleCount) {
+                aircraftScrollIndex = aircraftIndex - visibleCount + 1;
+            }
+            aircraftScrollIndex = clampScrollIndex(aircraftScrollIndex, Aircraft.values().length, visibleCount);
+        }
+
+        private void ensureHangarAircraftVisible() {
+            int visibleCount = Math.min(3, Aircraft.values().length);
+            if (hangarAircraftIndex < hangarScrollIndex) {
+                hangarScrollIndex = hangarAircraftIndex;
+            } else if (hangarAircraftIndex >= hangarScrollIndex + visibleCount) {
+                hangarScrollIndex = hangarAircraftIndex - visibleCount + 1;
+            }
+            hangarScrollIndex = clampScrollIndex(hangarScrollIndex, Aircraft.values().length, visibleCount);
         }
 
         private void confirmSetupAircraft(int role) {
@@ -3200,8 +3387,20 @@ public class JetBattleGame {
             int listY = 116;
             int listW = 250;
             int rowH = 72;
-            for (int i = 0; i < aircraft.length; i++) {
-                int rowY = listY + i * (rowH + 12);
+            int visibleCount = Math.min(3, aircraft.length);
+            int arrowY = listY + visibleCount * (rowH + 12) + 2;
+            if (y >= arrowY && y <= arrowY + 24) {
+                if (x >= listX + listW - 60 && x <= listX + listW - 36) {
+                    hangarScrollIndex = clampScrollIndex(hangarScrollIndex - 1, aircraft.length, visibleCount);
+                } else if (x >= listX + listW - 32 && x <= listX + listW - 8) {
+                    hangarScrollIndex = clampScrollIndex(hangarScrollIndex + 1, aircraft.length, visibleCount);
+                }
+                repaint();
+                return;
+            }
+            for (int slot = 0; slot < visibleCount; slot++) {
+                int i = hangarScrollIndex + slot;
+                int rowY = listY + slot * (rowH + 12);
                 if (x >= listX && x <= listX + listW && y >= rowY && y <= rowY + rowH) {
                     hangarAircraftIndex = i;
                     repaint();
@@ -3225,6 +3424,26 @@ public class JetBattleGame {
                     setVolumeFromMouse(mouseX, 220 + 142, 250);
                     repaint();
                 }
+            }
+        }
+
+        private final class BattleMouseWheelListener implements MouseWheelListener {
+            @Override
+            public void mouseWheelMoved(MouseWheelEvent event) {
+                if (!choosingDifficulty || settingsOpen) {
+                    return;
+                }
+                int direction = Integer.signum(event.getWheelRotation());
+                if (showingHangar) {
+                    hangarScrollIndex = clampScrollIndex(hangarScrollIndex + direction,
+                            Aircraft.values().length, Math.min(3, Aircraft.values().length));
+                } else if (aircraftMenuOpen) {
+                    aircraftScrollIndex = clampScrollIndex(aircraftScrollIndex + direction,
+                            Aircraft.values().length, Math.min(3, Aircraft.values().length));
+                } else {
+                    return;
+                }
+                repaint();
             }
         }
 
@@ -3263,8 +3482,10 @@ public class JetBattleGame {
                             showingHangar = false;
                         } else if (key == KeyEvent.VK_UP || key == KeyEvent.VK_W || key == KeyEvent.VK_LEFT || key == KeyEvent.VK_A) {
                             hangarAircraftIndex = (hangarAircraftIndex - 1 + aircraft.length) % aircraft.length;
+                            ensureHangarAircraftVisible();
                         } else if (key == KeyEvent.VK_DOWN || key == KeyEvent.VK_S || key == KeyEvent.VK_RIGHT || key == KeyEvent.VK_D) {
                             hangarAircraftIndex = (hangarAircraftIndex + 1) % aircraft.length;
+                            ensureHangarAircraftVisible();
                         }
                         repaint();
                         return;
@@ -3282,6 +3503,7 @@ public class JetBattleGame {
                     } else if (key == KeyEvent.VK_LEFT || key == KeyEvent.VK_A) {
                         if (selectedMenuSection == 0) {
                             selectedAircraftIndex = selectedAircraftIndex < 0 ? 0 : (selectedAircraftIndex - 1 + aircraft.length) % aircraft.length;
+                            ensureAircraftVisible(selectedAircraftIndex);
                         } else {
                             selectedDifficultyIndex = (selectedDifficultyIndex - 1 + difficulties.length) % difficulties.length;
                         }
@@ -3289,6 +3511,7 @@ public class JetBattleGame {
                     } else if (key == KeyEvent.VK_RIGHT || key == KeyEvent.VK_D) {
                         if (selectedMenuSection == 0) {
                             selectedAircraftIndex = selectedAircraftIndex < 0 ? 0 : (selectedAircraftIndex + 1) % aircraft.length;
+                            ensureAircraftVisible(selectedAircraftIndex);
                         } else {
                             selectedDifficultyIndex = (selectedDifficultyIndex + 1) % difficulties.length;
                         }
@@ -3296,6 +3519,7 @@ public class JetBattleGame {
                     } else if (key == KeyEvent.VK_1) {
                         if (selectedMenuSection == 0) {
                             selectedAircraftIndex = 0;
+                            ensureAircraftVisible(selectedAircraftIndex);
                         } else {
                             selectedDifficultyIndex = 0;
                         }
@@ -3303,6 +3527,7 @@ public class JetBattleGame {
                     } else if (key == KeyEvent.VK_2) {
                         if (selectedMenuSection == 0) {
                             selectedAircraftIndex = 1;
+                            ensureAircraftVisible(selectedAircraftIndex);
                         } else {
                             selectedDifficultyIndex = 1;
                         }
@@ -3310,12 +3535,14 @@ public class JetBattleGame {
                     } else if (key == KeyEvent.VK_3) {
                         if (selectedMenuSection == 0 && aircraft.length > 2) {
                             selectedAircraftIndex = 2;
+                            ensureAircraftVisible(selectedAircraftIndex);
                         } else if (selectedMenuSection == 1) {
                             selectedDifficultyIndex = 2;
                         }
                         repaint();
                     } else if (key == KeyEvent.VK_4 && selectedMenuSection == 0 && aircraft.length > 3) {
                         selectedAircraftIndex = 3;
+                        ensureAircraftVisible(selectedAircraftIndex);
                         repaint();
                     } else if (key == KeyEvent.VK_ENTER) {
                         if (selectedMenuSection == 0) {
@@ -3538,13 +3765,14 @@ public class JetBattleGame {
     }
 
     private enum Aircraft {
-        TAIL_FLAME("Tail Flame", "尾焰", new Color(210, 65, 62), 720, 400, 18000, 1.4, 145),
-        BLUE_GLOW("Blue Glow", "蓝光", new Color(70, 133, 232), 960, 200, 19000, 1.55, 155),
-        NEUTRON_STAR("Neutron Star", "中子星", new Color(150, 85, 225), 700, 460, 22000, 1.5, 135),
-        VENUS("Venus", "金星", new Color(232, 181, 52), 820, 300, 18500, 1.3, 148);
+        TAIL_FLAME("Tail Flame", "尾焰", "tail-flame.png", new Color(210, 65, 62), 720, 400, 18000, 1.4, 145),
+        BLUE_GLOW("Blue Glow", "蓝光", "blue-glow.png", new Color(70, 133, 232), 960, 200, 19000, 1.55, 155),
+        NEUTRON_STAR("Neutron Star", "中子星", "neutron-star.png", new Color(150, 85, 225), 700, 460, 22000, 1.5, 135),
+        VENUS("Venus", "金星", "venus.png", new Color(232, 181, 52), 820, 300, 18500, 1.3, 148);
 
         private final String name;
         private final String zhName;
+        private final String spriteFile;
         private final Color color;
         private final int attack;
         private final int defense;
@@ -3552,9 +3780,10 @@ public class JetBattleGame {
         private final double skillBonus;
         private final int speed;
 
-        Aircraft(String name, String zhName, Color color, int attack, int defense, int maxHp, double skillBonus, int speed) {
+        Aircraft(String name, String zhName, String spriteFile, Color color, int attack, int defense, int maxHp, double skillBonus, int speed) {
             this.name = name;
             this.zhName = zhName;
+            this.spriteFile = spriteFile;
             this.color = color;
             this.attack = attack;
             this.defense = defense;
