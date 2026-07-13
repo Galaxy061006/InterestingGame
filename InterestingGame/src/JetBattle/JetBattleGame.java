@@ -19,6 +19,7 @@ import java.awt.GraphicsDevice;
 import java.awt.GraphicsEnvironment;
 import java.awt.RadialGradientPaint;
 import java.awt.RenderingHints;
+import java.awt.Shape;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
@@ -62,15 +63,16 @@ public class JetBattleGame {
          *
          * | Aircraft   | ATK | DEF | HP    | Skill multiplier | SPD | Normal attack                  | Skill                                      | Charge efficiency |
          * |------------|-----|-----|-------|------------------|-----|--------------------------------|--------------------------------------------|-------------------|
-         * | Tail Flame | 720 | 400 | 18000 | 1.40             | 145 | Missile, ATK - DEF, 700 ms     | 6 missiles, ATK / 6 * skill multiplier    | Base x1.00        |
-         * | Blue Glow  | 960 | 200 | 19000 | 1.55             | 155 | Bullet, ATK * 0.5, 400 ms      | Continuous laser, ATK * 0.7 * skill / sec | Base x1.05        |
-         * | Neutron Star | 700 | 460 | 22000 | 1.50           | 135 | Non-continuous laser orb, ATK - DEF, 600 ms | Slow singularity orb, random final ammo type | Base x1.20 + hit/deflect recovery |
-         * | Venus      | 820 | 300 | 18500 | 1.30             | 148 | Nose laser bar, ATK * 0.94 - DEF, 600 ms (420 ms armored) | 6.5 s reinforced armor and piercing twin laser cannons | Base x1.00 |
+         * | Tail Flame | 720 | 400 | 18000 | 1.40             | 188 | Missile, ATK - DEF, 700 ms     | 6 missiles, ATK / 6 * skill multiplier    | Base x1.00, boost leaves flame trails |
+         * | Blue Glow  | 960 | 200 | 19000 | 1.55             | 202 | Bullet, ATK * 0.5, 400 ms      | Continuous laser, ATK * 0.7 * skill / sec | Base x1.05, hits stack ion resonance |
+         * | Neutron Star | 700 | 460 | 22000 | 1.50           | 176 | Non-continuous laser orb, ATK - DEF, 600 ms | Slow singularity orb, random final ammo type | Base x1.20 + hit/deflect recovery |
+         * | Venus      | 820 | 300 | 18500 | 1.30             | 192 | Nose laser bar, ATK * 0.94 - DEF, 600 ms (420 ms armored) | 6.5 s reinforced armor and piercing twin laser cannons | Base x1.00, hits generate orbiting shards |
+         * | Six-Winged Angel | 680 | 260 | 18000 | 1.20       | 196 | Holy laser, ATK * 0.86 - DEF * 0.85, 600 ms | Healing circle and passive heart packs | Base x0.95 |
          *
          * Standard baseline values for future aircraft:
          * | ATK | DEF | HP    | Skill multiplier | SPD   |
          * |-----|-----|-------|------------------|-------|
-         * | 820 | 300 | 18500 | 1.275            | 147.5 |
+         * | 820 | 300 | 18500 | 1.275            | 189.5 |
          *
          * Blue Glow burst mode:
          * | Shots per round | Interval | Round cooldown | Damage per shot                         | Initial multiplier | Drop per shot | Min multiplier | Charge efficiency |
@@ -115,22 +117,24 @@ public class JetBattleGame {
         private static final int VENUS_ATTACK_COOLDOWN = 600;
         private static final int VENUS_ENHANCED_ATTACK_COOLDOWN = 420;
         private static final int AI_ATTACK_INTERVAL = 900;
-        private static final int FIGHTER_SIZE = 34;
-        private static final int ARENA_LEFT = 70;
-        private static final int ARENA_TOP = 92;
-        private static final int ARENA_WIDTH = 820;
-        private static final int ARENA_HEIGHT = 330;
+        private static final int FIGHTER_SIZE = 40;
+        private static final int ARENA_LEFT = 0;
+        private static final int ARENA_TOP = 0;
+        private static final int ARENA_WIDTH = WIDTH;
+        private static final int ARENA_HEIGHT = HEIGHT - ARENA_TOP;
         private static final double BOOST_SPEED_MULTIPLIER = 1.8;
         private static final double BOOST_MAX_ENERGY = 2.5;
         private static final double BOOST_RECOVER_DELAY = 0.5;
         private static final double BOOST_RECOVER_PER_SECOND = 0.8;
-        private static final double BEAM_PROJECTILE_SPEED = 540;
-        private static final double BLUE_GLOW_PROJECTILE_SPEED = 760;
-        private static final double MISSILE_PROJECTILE_SPEED = 430;
-        private static final double HOMING_PROJECTILE_SPEED = 430;
-        private static final double TAIL_FLAME_SKILL_MISSILE_INITIAL_SPEED = 190;
-        private static final double TAIL_FLAME_SKILL_MISSILE_MAX_SPEED = 640;
-        private static final double TAIL_FLAME_SKILL_MISSILE_ACCELERATION = 420;
+        private static final double BEAM_PROJECTILE_SPEED = 780;
+        private static final double BLUE_GLOW_PROJECTILE_SPEED = 1080;
+        private static final double MISSILE_PROJECTILE_SPEED = 630;
+        private static final double HOMING_PROJECTILE_SPEED = 630;
+        private static final double TAIL_FLAME_SKILL_MISSILE_INITIAL_SPEED = 250;
+        private static final double TAIL_FLAME_SKILL_MISSILE_MAX_SPEED = 930;
+        private static final double TAIL_FLAME_SKILL_MISSILE_ACCELERATION = 610;
+        private static final double TAIL_FLAME_NORMAL_HOMING_DURATION = 2.2;
+        private static final double TAIL_FLAME_SKILL_HOMING_DURATION = 2.8;
         private static final double BLUE_INITIAL_BURST_MULTIPLIER = 1.2;
         private static final double BLUE_BURST_MULTIPLIER_DROP = 0.05;
         private static final double BLUE_MIN_BURST_MULTIPLIER = 0.25;
@@ -143,12 +147,13 @@ public class JetBattleGame {
         private static final double BLUE_LASER_HIT_RADIUS = 22.0;
         private static final double NEUTRON_SKILL_WINDUP_DURATION = 0.55;
         private static final double NEUTRON_ORB_SPEED = 230;
-        private static final double NEUTRON_ORB_RADIUS = 30;
+        private static final double NEUTRON_ORB_RADIUS = 36;
         private static final double NEUTRON_ORB_PULL_RADIUS = 98;
         private static final double NEUTRON_ORB_PULL_DURATION = 4.0;
         private static final double NEUTRON_ORB_FLIGHT_DURATION = 10.0;
         private static final double NEUTRON_ORB_DEFLECT_RADIUS = 150;
         private static final double NEUTRON_ORB_DEFLECT_STRENGTH = 5.2;
+        private static final double NEUTRON_ORB_DEFLECT_CHARGE_RATIO = 0.2;
         private static final double NEUTRON_NORMAL_ORB_RADIUS = 8;
         private static final double VENUS_GATE_DURATION = 1.2;
         private static final double VENUS_ARMOR_DURATION = 6.5;
@@ -158,6 +163,31 @@ public class JetBattleGame {
         private static final double VENUS_DEFENSE_BOOST = 1.20;
         private static final double VENUS_SPEED_BOOST = 1.10;
         private static final int VENUS_ARMOR_HP = 1600;
+        private static final int VENUS_MAX_SHARDS = 3;
+        private static final int VENUS_SHARD_ABSORB = 180;
+        private static final double TAIL_FLAME_TRAIL_INTERVAL = 0.12;
+        private static final double TAIL_FLAME_TRAIL_DURATION = 3.4;
+        private static final double TAIL_FLAME_TRAIL_RADIUS = 30;
+        private static final double TAIL_FLAME_TRAIL_DAMAGE_PER_SECOND = 95;
+        private static final double BLUE_GLOW_RESONANCE_DURATION = 2.8;
+        private static final int BLUE_GLOW_RESONANCE_TRIGGER_STACKS = 3;
+        private static final double BLUE_GLOW_ION_LOCK_DURATION = 0.65;
+        private static final double BLUE_GLOW_ION_BOOST_DRAIN = 0.45;
+        private static final double SERAPH_PROJECTILE_SPEED = 860;
+        private static final double SERAPH_ATTACK_MULTIPLIER = 0.86;
+        private static final double SERAPH_DEFENSE_FACTOR = 0.85;
+        private static final double SERAPH_ZONE_RADIUS = 170;
+        private static final double SERAPH_ZONE_DURATION = 7.0;
+        private static final double SERAPH_ZONE_HEAL_PER_SECOND = 320;
+        private static final double SERAPH_SPEED_BUFF_MULTIPLIER = 1.16;
+        private static final double SERAPH_SPEED_DEBUFF_MULTIPLIER = 0.55;
+        private static final double SERAPH_DEFENSE_DEBUFF_MULTIPLIER = 0.86;
+        private static final double SERAPH_HEART_SPAWN_INTERVAL = 7.5;
+        private static final double SERAPH_HEART_DURATION = 12.0;
+        private static final int SERAPH_HEART_HEAL = 1200;
+        private static final int SERAPH_HEART_CHARGE = 14;
+        private static final int SERAPH_MAX_HEARTS_PER_SIDE = 2;
+        private static final double SERAPH_HEART_PICKUP_RADIUS = 30.0;
         private static final double SHIELD_DURATION = 8.0;
         private static final double SHIELD_SPAWN_INTERVAL = 5.5;
         private static final double SHIELD_PICKUP_RADIUS = 34.0;
@@ -168,11 +198,16 @@ public class JetBattleGame {
         private final Fighter blue = new Fighter(Aircraft.BLUE_GLOW, 740, 256);
         private final List<Projectile> projectiles = new ArrayList<>();
         private final List<ShieldPickup> shieldPickups = new ArrayList<>();
+        private final List<SeraphZone> seraphZones = new ArrayList<>();
+        private final List<HeartPickup> heartPickups = new ArrayList<>();
+        private final List<FlameTrail> flameTrails = new ArrayList<>();
         private final List<FloatingText> floatingTexts = new ArrayList<>();
         private final Set<Integer> pressedKeys = new HashSet<>();
         private final Random random = new Random();
         private final AudioEngine audio = new AudioEngine();
         private final EnumMap<Aircraft, BufferedImage> aircraftSprites = new EnumMap<>(Aircraft.class);
+        private final EnumMap<BattleMap, BufferedImage> mapImages = new EnumMap<>(BattleMap.class);
+        private BufferedImage seraphHeartImage;
         private final JFrame frame;
         private final GraphicsDevice graphicsDevice = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
         private final Timer gameTimer = new Timer(16, event -> updateGame());
@@ -209,12 +244,17 @@ public class JetBattleGame {
         private AmmoType pendingBlueGlowAmmoType = AmmoType.BULLET;
         private LaserType pendingBlueGlowLaserType = LaserType.NONE;
         private double shieldSpawnTimer;
+        private double blueHeartSpawnTimer;
+        private double redHeartSpawnTimer;
         private int blueBurstShotsRemaining;
         private int aiBlueBurstShotsRemaining;
         private int selectedDifficultyIndex = 1;
         private int selectedAircraftIndex = -1;
         private int selectedAiAircraftIndex = -1;
         private int hangarAircraftIndex = 1;
+        private int selectedMapIndex;
+        private int previewMapIndex;
+        private int titleMapIndex;
         private int aircraftScrollIndex;
         private int hangarScrollIndex;
         private int selectedMenuSection;
@@ -243,8 +283,12 @@ public class JetBattleGame {
         private Difficulty difficulty = Difficulty.MEDIUM;
         private Aircraft playerAircraft = Aircraft.BLUE_GLOW;
         private Aircraft aiAircraft = Aircraft.TAIL_FLAME;
+        private Aircraft titleLeftAircraft = Aircraft.BLUE_GLOW;
+        private Aircraft titleRightAircraft = Aircraft.TAIL_FLAME;
+        private boolean titleScreen = true;
         private boolean choosingDifficulty = true;
         private boolean showingHangar;
+        private boolean showingMapSelection;
         private boolean aircraftMenuOpen = true;
         private boolean difficultyMenuOpen;
         private boolean playerAircraftConfirmed;
@@ -266,12 +310,21 @@ public class JetBattleGame {
         private long explosionStartedAt;
         private long playerAircraftConfirmedAt;
         private long aiAircraftConfirmedAt;
+        private long titleNextBlueAttackTime;
+        private long titleNextRedAttackTime;
+        private long titleNextBlueSkillTime;
+        private long titleNextRedSkillTime;
         private double explosionX;
         private double explosionY;
+        private boolean titleDemoMode;
+        private boolean titleDemoInitialized;
 
         BattlePanel(JFrame frame) {
             this.frame = frame;
             loadAircraftSprites();
+            loadMapImages();
+            loadSeraphHeartImage();
+            randomizeTitleScreen();
             setPreferredSize(new Dimension(WIDTH, HEIGHT));
             setBackground(new Color(18, 20, 26));
             setFocusable(true);
@@ -284,16 +337,45 @@ public class JetBattleGame {
             aiTimer.stop();
         }
 
+        private void randomizeTitleScreen() {
+            BattleMap[] maps = BattleMap.values();
+            Aircraft[] aircraft = Aircraft.values();
+            titleMapIndex = random.nextInt(maps.length);
+            titleLeftAircraft = aircraft[random.nextInt(aircraft.length)];
+            titleRightAircraft = aircraft[random.nextInt(aircraft.length)];
+            if (aircraft.length > 1) {
+                while (titleRightAircraft == titleLeftAircraft) {
+                    titleRightAircraft = aircraft[random.nextInt(aircraft.length)];
+                }
+            }
+        }
+
         private void loadAircraftSprites() {
             for (Aircraft aircraft : Aircraft.values()) {
-                BufferedImage image = loadAircraftSprite(aircraft.spriteFile);
+                BufferedImage image = loadAssetImage(aircraft.spriteFile);
                 if (image != null) {
                     aircraftSprites.put(aircraft, trimTransparentBounds(image));
                 }
             }
         }
 
-        private BufferedImage loadAircraftSprite(String fileName) {
+        private void loadMapImages() {
+            for (BattleMap map : BattleMap.values()) {
+                BufferedImage image = loadAssetImage(map.imageFile);
+                if (image != null) {
+                    mapImages.put(map, image);
+                }
+            }
+        }
+
+        private void loadSeraphHeartImage() {
+            BufferedImage image = loadAssetImage("seraph-heart.png");
+            if (image != null) {
+                seraphHeartImage = trimTransparentBounds(image);
+            }
+        }
+
+        private BufferedImage loadAssetImage(String fileName) {
             String resourcePath = "/JetBattle/assets/" + fileName;
             try (InputStream stream = JetBattleGame.class.getResourceAsStream(resourcePath)) {
                 if (stream != null) {
@@ -343,6 +425,12 @@ public class JetBattleGame {
             double seconds = (now - lastUpdateTime) / 1_000_000_000.0;
             lastUpdateTime = now;
 
+            if (titleScreen) {
+                updateTitleDemoBattle(seconds);
+                repaint();
+                return;
+            }
+
             if (explosionActive) {
                 updateExplosion();
             }
@@ -351,22 +439,221 @@ public class JetBattleGame {
                 updatePlayerLaserWindup(seconds);
                 updateNeutronSkillWindups(seconds);
                 updateNeutronPulls(seconds);
+                updateSeraphEffects(seconds);
                 updateBoostStates(seconds);
                 if (blueLaserWindupRemaining <= 0) {
                     movePlayer(seconds);
                 }
                 moveAi(seconds);
+                updatePassiveEffects(seconds);
                 updatePlayerAutoFire(seconds);
                 updateAiBlueBurstFire();
                 updatePlayerLaser(seconds);
                 updateAiLaser(seconds);
                 updateProjectiles(seconds);
                 updateShieldPickups(seconds);
+                updateHeartPickups(seconds);
                 updateActiveArmors(seconds);
                 updateFloatingTexts(seconds);
             }
 
             repaint();
+        }
+
+        private void updateTitleDemoBattle(double seconds) {
+            if (!titleDemoInitialized) {
+                resetTitleDemoBattle();
+            }
+
+            long now = System.currentTimeMillis();
+            mouseX = (int) Math.round(red.x);
+            mouseY = (int) Math.round(red.y);
+            updateTitleDemoMovement(seconds);
+            mouseX = (int) Math.round(red.x);
+            mouseY = (int) Math.round(red.y);
+            updateNeutronSkillWindups(seconds);
+            updateNeutronPulls(seconds);
+            updateSeraphEffects(seconds);
+            updateTitleDemoAttacks(now);
+            updatePassiveEffects(seconds);
+            updateAiBlueBurstFire();
+            updatePlayerLaser(seconds);
+            updateAiLaser(seconds);
+            updateProjectiles(seconds);
+            updateHeartPickups(seconds);
+            updateActiveArmors(seconds);
+            updateFloatingTexts(seconds);
+            if (blue.hp <= 0 || red.hp <= 0 || projectiles.size() > 80) {
+                resetTitleDemoBattle();
+            }
+        }
+
+        private void resetTitleDemoBattle() {
+            titleDemoMode = true;
+            titleDemoInitialized = true;
+            playerAircraft = titleLeftAircraft;
+            aiAircraft = titleRightAircraft;
+            blue.applyAircraft(playerAircraft);
+            red.applyAircraft(aiAircraft);
+            blue.reset();
+            red.reset();
+            blue.x = ARENA_LEFT + 210;
+            blue.y = ARENA_TOP + ARENA_HEIGHT / 2.0 + 42;
+            red.x = ARENA_LEFT + ARENA_WIDTH - 210;
+            red.y = ARENA_TOP + ARENA_HEIGHT / 2.0 - 42;
+            blue.charge = 45;
+            red.charge = 45;
+            projectiles.clear();
+            floatingTexts.clear();
+            shieldPickups.clear();
+            seraphZones.clear();
+            heartPickups.clear();
+            flameTrails.clear();
+            gameOver = false;
+            explosionActive = false;
+            resultReady = false;
+            blueLaserWindupRemaining = 0;
+            blueLaserRemaining = 0;
+            aiLaserRemaining = 0;
+            aiLaserDamageCarry = 0;
+            blueLaserDamageCarry = 0;
+            playerNeutronSkillWindupRemaining = 0;
+            aiNeutronSkillWindupRemaining = 0;
+            blueBurstMode = true;
+            aiBlueBurstMode = true;
+            blueBurstShotsRemaining = 0;
+            aiBlueBurstShotsRemaining = 0;
+            blueBurstMultiplier = BLUE_INITIAL_BURST_MULTIPLIER;
+            aiBlueBurstMultiplier = BLUE_INITIAL_BURST_MULTIPLIER;
+            blueHeartSpawnTimer = SERAPH_HEART_SPAWN_INTERVAL * 0.45;
+            redHeartSpawnTimer = SERAPH_HEART_SPAWN_INTERVAL * 0.65;
+            long now = System.currentTimeMillis();
+            titleNextBlueAttackTime = now + 450;
+            titleNextRedAttackTime = now + 780;
+            titleNextBlueSkillTime = now + 2600;
+            titleNextRedSkillTime = now + 3600;
+        }
+
+        private void clearTitleDemoBattle() {
+            titleDemoMode = false;
+            titleDemoInitialized = false;
+            projectiles.clear();
+            floatingTexts.clear();
+            shieldPickups.clear();
+            seraphZones.clear();
+            heartPickups.clear();
+            flameTrails.clear();
+            blueLaserWindupRemaining = 0;
+            blueLaserRemaining = 0;
+            aiLaserRemaining = 0;
+            aiLaserDamageCarry = 0;
+            blueLaserDamageCarry = 0;
+            playerNeutronSkillWindupRemaining = 0;
+            aiNeutronSkillWindupRemaining = 0;
+            blueBurstShotsRemaining = 0;
+            aiBlueBurstShotsRemaining = 0;
+            gameOver = false;
+            explosionActive = false;
+            resultReady = false;
+        }
+
+        private void updateTitleDemoMovement(double seconds) {
+            double now = System.currentTimeMillis() / 1000.0;
+            moveTitleDemoFighter(blue, now, seconds, 0, -1);
+            moveTitleDemoFighter(red, now, seconds, Math.PI, 1);
+            blue.boosting = true;
+            red.boosting = true;
+        }
+
+        private void moveTitleDemoFighter(Fighter fighter, double now, double seconds, double phaseOffset, int side) {
+            double centerX = ARENA_LEFT + ARENA_WIDTH / 2.0;
+            double centerY = ARENA_TOP + ARENA_HEIGHT / 2.0;
+            double angle = now * 0.62 + phaseOffset;
+            double desiredX = centerX
+                    + Math.cos(angle) * 310
+                    + Math.sin(angle * 1.7 + side * 0.8) * 86;
+            double desiredY = centerY
+                    + Math.sin(angle * 1.23) * 124
+                    + Math.cos(angle * 0.72 + side * 1.3) * 48;
+            desiredX = clamp(desiredX, ARENA_LEFT + 52, ARENA_LEFT + ARENA_WIDTH - 52);
+            desiredY = clamp(desiredY, ARENA_TOP + 42, ARENA_TOP + ARENA_HEIGHT - 42);
+            double dx = desiredX - fighter.x;
+            double dy = desiredY - fighter.y;
+            double distance = Math.hypot(dx, dy);
+            if (distance <= 0.01) {
+                return;
+            }
+            double maxStep = effectiveSpeed(fighter) * 1.05 * seconds;
+            double step = Math.min(distance, maxStep);
+            fighter.x = clamp(fighter.x + dx / distance * step,
+                    ARENA_LEFT + FIGHTER_SIZE / 2.0, ARENA_LEFT + ARENA_WIDTH - FIGHTER_SIZE / 2.0);
+            fighter.y = clamp(fighter.y + dy / distance * step,
+                    ARENA_TOP + FIGHTER_SIZE / 2.0, ARENA_TOP + ARENA_HEIGHT - FIGHTER_SIZE / 2.0);
+        }
+
+        private void updateTitleDemoAttacks(long now) {
+            if (now >= titleNextBlueAttackTime && blueLaserRemaining <= 0 && blueLaserWindupRemaining <= 0) {
+                fireTitleDemoAttack(blue, red, playerAircraft, true);
+                titleNextBlueAttackTime = now + titleDemoAttackInterval(blue, playerAircraft);
+            }
+            if (now >= titleNextRedAttackTime && aiLaserRemaining <= 0) {
+                fireTitleDemoAttack(red, blue, aiAircraft, false);
+                titleNextRedAttackTime = now + titleDemoAttackInterval(red, aiAircraft);
+            }
+            if (now >= titleNextBlueSkillTime) {
+                fireTitleDemoSkill(blue, red, playerAircraft, true);
+                titleNextBlueSkillTime = now + 5200 + random.nextInt(1800);
+            }
+            if (now >= titleNextRedSkillTime) {
+                fireTitleDemoSkill(red, blue, aiAircraft, false);
+                titleNextRedSkillTime = now + 5200 + random.nextInt(1800);
+            }
+        }
+
+        private int titleDemoAttackInterval(Fighter fighter, Aircraft aircraft) {
+            return switch (aircraft) {
+                case BLUE_GLOW -> BLUE_FIRE_INTERVAL * 3;
+                case VENUS -> venusArmorActive(fighter) ? VENUS_ENHANCED_ATTACK_COOLDOWN : VENUS_ATTACK_COOLDOWN;
+                case TAIL_FLAME -> TAIL_FLAME_ATTACK_COOLDOWN;
+                case NEUTRON_STAR, SIX_WINGED_ANGEL -> NORMAL_ATTACK_COOLDOWN;
+            };
+        }
+
+        private void fireTitleDemoAttack(Fighter attacker, Fighter target, Aircraft aircraft, boolean fromBlue) {
+            switch (aircraft) {
+                case BLUE_GLOW -> {
+                    pendingBlueGlowChargeMultiplier = fromBlue ? BLUE_BURST_CHARGE_MULTIPLIER : 1.0;
+                    pendingBlueGlowAmmoType = fromBlue ? AmmoType.LASER : AmmoType.BULLET;
+                    pendingBlueGlowLaserType = fromBlue ? LaserType.NON_CONTINUOUS : LaserType.NONE;
+                    int damage = blueGlowAttackDamage(attacker, fromBlue, fromBlue ? blueBurstMultiplier : aiBlueBurstMultiplier);
+                    fireBlueGlowLasers(attacker, target, target.x, target.y, damage, text("蓝光", "Blue Glow"));
+                }
+                case NEUTRON_STAR -> fireNeutronStarShot(attacker, target, target.x, target.y, fromBlue);
+                case VENUS -> fireVenusShot(attacker, target, target.x, target.y, fromBlue);
+                case SIX_WINGED_ANGEL -> fireSeraphShot(attacker, target, target.x, target.y, fromBlue);
+                case TAIL_FLAME -> fireTailFlameShot(attacker, target, target.x, target.y, fromBlue);
+            }
+        }
+
+        private void fireTitleDemoSkill(Fighter attacker, Fighter target, Aircraft aircraft, boolean fromBlue) {
+            attacker.charge = 0;
+            attacker.chargeCarry = 0;
+            switch (aircraft) {
+                case BLUE_GLOW -> {
+                    if (fromBlue) {
+                        blueLaserRemaining = BLUE_LASER_DURATION;
+                        blueLaserDamageCarry = 0;
+                    } else {
+                        aiLaserRemaining = BLUE_LASER_DURATION;
+                        aiLaserDamageCarry = 0;
+                    }
+                }
+                case NEUTRON_STAR -> fireNeutronStarSkillOrb(attacker, target, target.x, target.y);
+                case VENUS -> activateVenusArmor(attacker);
+                case SIX_WINGED_ANGEL -> activateSeraphZone(attacker, attacker.x * 0.65 + target.x * 0.35, attacker.y * 0.65 + target.y * 0.35);
+                case TAIL_FLAME -> fireTailFlameWingMissiles(attacker, target, target.x, target.y, tailFlameMissileDamage(attacker));
+            }
+            attacker.charge = 35;
         }
 
         private void movePlayer(double seconds) {
@@ -438,7 +725,7 @@ public class JetBattleGame {
             }
 
             double length = Math.hypot(dx, dy);
-            double speedMultiplier = fighter.boosting ? BOOST_SPEED_MULTIPLIER : 1.0;
+            double speedMultiplier = fighter.boosting && fighter.blueGlowIonLockRemaining <= 0 ? BOOST_SPEED_MULTIPLIER : 1.0;
             double step = effectiveSpeed(fighter) * speedMultiplier * seconds;
             fighter.x = clamp(fighter.x + dx / length * step, ARENA_LEFT + FIGHTER_SIZE / 2.0, ARENA_LEFT + ARENA_WIDTH - FIGHTER_SIZE / 2.0);
             fighter.y = clamp(fighter.y + dy / length * step, ARENA_TOP + FIGHTER_SIZE / 2.0, ARENA_TOP + ARENA_HEIGHT - FIGHTER_SIZE / 2.0);
@@ -450,8 +737,8 @@ public class JetBattleGame {
                     || pressedKeys.contains(keyDown)
                     || pressedKeys.contains(keyRight);
             updateAiBoostDecision(seconds);
-            updateBoost(blue, pressedKeys.contains(keyBoost) && playerMoving, seconds);
-            updateBoost(red, aiWantsBoost, seconds);
+            updateBoost(blue, pressedKeys.contains(keyBoost) && playerMoving && blue.blueGlowIonLockRemaining <= 0, seconds);
+            updateBoost(red, aiWantsBoost && red.blueGlowIonLockRemaining <= 0, seconds);
         }
 
         private void updateAiBoostDecision(double seconds) {
@@ -530,7 +817,9 @@ public class JetBattleGame {
                 applyNeutronOrbDeflection(projectile, seconds);
                 projectile.update(seconds);
 
-                Fighter target = projectile.fromBlue ? red : blue;
+                Fighter target = projectile.neutronDeflectOwner != null
+                        ? (projectile.neutronDeflectOwner == blue ? red : blue)
+                        : projectile.fromBlue ? red : blue;
                 if (projectile.neutronSkillOrb) {
                     if (updateNeutronSkillOrb(projectile, target, seconds)) {
                         iterator.remove();
@@ -552,8 +841,11 @@ public class JetBattleGame {
                     applyDamage(target, projectile.damage, projectile.ammoType, projectile.laserType);
                     playHitSound();
                     addDefenderCharge(target);
-                    if (!projectile.skill) {
-                        Fighter attacker = projectile.fromBlue ? blue : red;
+                    Fighter attacker = projectile.fromBlue ? blue : red;
+                    if (projectile.neutronDeflectOwner == null) {
+                        applyHitPassives(attacker, target, projectile);
+                    }
+                    if (!projectile.skill && projectile.neutronDeflectOwner == null) {
                         addCharge(attacker, projectile.chargeMultiplier);
                     }
                     message = projectile.hitMessage;
@@ -582,6 +874,7 @@ public class JetBattleGame {
             return switch (aircraft) {
                 case BLUE_GLOW -> BLUE_CHARGE_MULTIPLIER;
                 case NEUTRON_STAR -> NEUTRON_CHARGE_MULTIPLIER;
+                case SIX_WINGED_ANGEL -> 0.95;
                 case TAIL_FLAME, VENUS -> 1.0;
             };
         }
@@ -611,6 +904,20 @@ public class JetBattleGame {
             }
         }
 
+        private void addNeutronDeflectCharge(Fighter fighter) {
+            if (fighter == null) {
+                return;
+            }
+            double aircraftMultiplier = chargeMultiplierFor(aircraftFor(fighter));
+            double totalGain = CHARGE_GAIN * NEUTRON_ORB_DEFLECT_CHARGE_RATIO * aircraftMultiplier + fighter.chargeCarry;
+            int chargeGain = (int) totalGain;
+            fighter.chargeCarry = totalGain - chargeGain;
+            fighter.charge = Math.min(MAX_CHARGE, fighter.charge + chargeGain);
+            if (fighter.charge >= MAX_CHARGE) {
+                fighter.chargeCarry = 0;
+            }
+        }
+
         private void applyNeutronOrbDeflection(Projectile projectile, double seconds) {
             if (projectile.neutronSkillOrb) {
                 return;
@@ -625,19 +932,30 @@ public class JetBattleGame {
                 double dx = orb.x - projectile.x;
                 double dy = orb.y - projectile.y;
                 double distance = Math.hypot(dx, dy);
-                if (distance <= 0 || distance > NEUTRON_ORB_DEFLECT_RADIUS) {
+                double captureRadius = projectile.neutronDeflected && projectile.neutronDeflectOwner == orb.neutronOwner
+                        ? NEUTRON_ORB_DEFLECT_RADIUS * 2.2
+                        : NEUTRON_ORB_DEFLECT_RADIUS;
+                if (distance <= 0 || distance > captureRadius) {
                     continue;
                 }
                 if (!projectile.neutronDeflected) {
                     projectile.neutronDeflected = true;
-                    if (orb.neutronOwner != null) {
-                        addCharge(orb.neutronOwner, 0.2);
-                    }
-                    if (projectile.ammoType != AmmoType.LASER) {
+                    projectile.neutronDeflectOwner = orb.neutronOwner;
+                    projectile.neutronOrbitPhase = random.nextDouble() * Math.PI * 2.0;
+                    projectile.neutronOrbitDirection = random.nextBoolean() ? 1.0 : -1.0;
+                    projectile.neutronOrbitBias = 0.75 + random.nextDouble() * 0.65;
+                    addNeutronDeflectCharge(orb.neutronOwner);
+                    if (projectile.laserType != LaserType.CONTINUOUS) {
                         projectile.removeSpecialEffects();
                     }
                 }
-                double influence = (1.0 - distance / NEUTRON_ORB_DEFLECT_RADIUS) * NEUTRON_ORB_DEFLECT_STRENGTH * seconds;
+                if (projectile.laserType != LaserType.CONTINUOUS) {
+                    updateCapturedProjectileOrbit(projectile, orb, distance, dx, dy, seconds);
+                    continue;
+                }
+
+                double influence = (1.0 - Math.min(distance, NEUTRON_ORB_DEFLECT_RADIUS) / NEUTRON_ORB_DEFLECT_RADIUS)
+                        * NEUTRON_ORB_DEFLECT_STRENGTH * seconds * 2.15;
                 double speed = Math.hypot(projectile.vx, projectile.vy);
                 double nx = projectile.vx / speed;
                 double ny = projectile.vy / speed;
@@ -651,6 +969,39 @@ public class JetBattleGame {
             }
         }
 
+        private void updateCapturedProjectileOrbit(Projectile projectile, Projectile orb, double distance,
+                                                   double dxToOrb, double dyToOrb, double seconds) {
+            if (distance <= 0) {
+                return;
+            }
+            double speed = Math.max(160, Math.hypot(projectile.vx, projectile.vy));
+            double toOrbX = dxToOrb / distance;
+            double toOrbY = dyToOrb / distance;
+            double tangentX = -toOrbY * projectile.neutronOrbitDirection;
+            double tangentY = toOrbX * projectile.neutronOrbitDirection;
+            projectile.neutronOrbitPhase += seconds * (3.4 + projectile.neutronOrbitBias);
+            double targetRadius = 32
+                    + 42 * projectile.neutronOrbitBias
+                    + 18 * Math.sin(projectile.neutronOrbitPhase)
+                    + 10 * Math.sin(projectile.neutronOrbitPhase * 1.73);
+            double radialError = distance - targetRadius;
+            double radialStrength = clamp(radialError / 72.0, -0.95, 1.35);
+            double swirl = 0.82 + 0.18 * Math.sin(projectile.neutronOrbitPhase * 0.83);
+            if (distance > NEUTRON_ORB_DEFLECT_RADIUS * 0.9) {
+                radialStrength = Math.max(radialStrength, 1.25);
+                swirl *= 0.55;
+            }
+            double newX = tangentX * swirl + toOrbX * radialStrength;
+            double newY = tangentY * swirl + toOrbY * radialStrength;
+            double newLength = Math.hypot(newX, newY);
+            if (newLength == 0) {
+                return;
+            }
+            double adjustedSpeed = Math.max(speed, 260) * (0.92 + 0.16 * Math.sin(projectile.neutronOrbitPhase * 1.17));
+            projectile.vx = newX / newLength * adjustedSpeed;
+            projectile.vy = newY / newLength * adjustedSpeed;
+        }
+
         private boolean updateNeutronSkillOrb(Projectile projectile, Fighter target, double seconds) {
             if (!projectile.neutronImpactStarted) {
                 projectile.neutronFlightRemaining = Math.max(0, projectile.neutronFlightRemaining - seconds);
@@ -659,7 +1010,7 @@ public class JetBattleGame {
                     return true;
                 }
                 double distance = Math.hypot(projectile.x - target.x, projectile.y - target.y);
-                if (distance > FIGHTER_SIZE / 2.0 + projectile.radius) {
+                if (distance > NEUTRON_ORB_DEFLECT_RADIUS) {
                     return false;
                 }
                 projectile.startNeutronImpact(randomNeutronAmmoType(), target);
@@ -756,6 +1107,205 @@ public class JetBattleGame {
             shieldPickups.add(new ShieldPickup(type, x, y));
         }
 
+        private void updateSeraphEffects(double seconds) {
+            blue.seraphSpeedBuffRemaining = Math.max(0, blue.seraphSpeedBuffRemaining - seconds);
+            red.seraphSpeedBuffRemaining = Math.max(0, red.seraphSpeedBuffRemaining - seconds);
+            blue.seraphSpeedDebuffRemaining = Math.max(0, blue.seraphSpeedDebuffRemaining - seconds);
+            red.seraphSpeedDebuffRemaining = Math.max(0, red.seraphSpeedDebuffRemaining - seconds);
+            blue.seraphDefenseDebuffRemaining = Math.max(0, blue.seraphDefenseDebuffRemaining - seconds);
+            red.seraphDefenseDebuffRemaining = Math.max(0, red.seraphDefenseDebuffRemaining - seconds);
+
+            Iterator<SeraphZone> iterator = seraphZones.iterator();
+            while (iterator.hasNext()) {
+                SeraphZone zone = iterator.next();
+                zone.remaining -= seconds;
+                if (zone.remaining <= 0) {
+                    iterator.remove();
+                    continue;
+                }
+
+                Fighter owner = zone.fromBlue ? blue : red;
+                Fighter enemy = zone.fromBlue ? red : blue;
+                if (zone.contains(owner)) {
+                    healFighter(owner, SERAPH_ZONE_HEAL_PER_SECOND * owner.skillBonus * seconds);
+                    owner.seraphSpeedBuffRemaining = 0.12;
+                }
+                if (zone.contains(enemy)) {
+                    enemy.seraphSpeedDebuffRemaining = 0.12;
+                    enemy.seraphDefenseDebuffRemaining = 0.12;
+                }
+            }
+        }
+
+        private void updateHeartPickups(double seconds) {
+            updateHeartSpawner(blue, true, seconds);
+            updateHeartSpawner(red, false, seconds);
+
+            Iterator<HeartPickup> iterator = heartPickups.iterator();
+            while (iterator.hasNext()) {
+                HeartPickup pickup = iterator.next();
+                pickup.remaining -= seconds;
+                if (pickup.remaining <= 0) {
+                    iterator.remove();
+                    continue;
+                }
+                Fighter owner = pickup.fromBlue ? blue : red;
+                if (pickup.isPickedBy(owner)) {
+                    int healed = healFighter(owner, SERAPH_HEART_HEAL);
+                    int oldCharge = owner.charge;
+                    owner.charge = Math.min(MAX_CHARGE, owner.charge + SERAPH_HEART_CHARGE);
+                    int gainedCharge = owner.charge - oldCharge;
+                    if (healed > 0 || gainedCharge > 0) {
+                        String value = healed > 0
+                                ? "+" + healed + " HP  +" + gainedCharge + " EN"
+                                : "+" + gainedCharge + " EN";
+                        showFloatingText(owner.x, owner.y - 42, value, new Color(255, 124, 148));
+                        playShieldSound();
+                        iterator.remove();
+                    }
+                }
+            }
+        }
+
+        private void updateHeartSpawner(Fighter fighter, boolean fromBlue, double seconds) {
+            if (aircraftFor(fighter) != Aircraft.SIX_WINGED_ANGEL) {
+                if (fromBlue) {
+                    blueHeartSpawnTimer = SERAPH_HEART_SPAWN_INTERVAL;
+                } else {
+                    redHeartSpawnTimer = SERAPH_HEART_SPAWN_INTERVAL;
+                }
+                return;
+            }
+            int ownedHearts = 0;
+            for (HeartPickup pickup : heartPickups) {
+                if (pickup.fromBlue == fromBlue) {
+                    ownedHearts++;
+                }
+            }
+            if (ownedHearts >= SERAPH_MAX_HEARTS_PER_SIDE) {
+                return;
+            }
+
+            if (fromBlue) {
+                blueHeartSpawnTimer -= seconds;
+                if (blueHeartSpawnTimer <= 0) {
+                    spawnHeartPickup(true);
+                    blueHeartSpawnTimer = SERAPH_HEART_SPAWN_INTERVAL;
+                }
+            } else {
+                redHeartSpawnTimer -= seconds;
+                if (redHeartSpawnTimer <= 0) {
+                    spawnHeartPickup(false);
+                    redHeartSpawnTimer = SERAPH_HEART_SPAWN_INTERVAL;
+                }
+            }
+        }
+
+        private void spawnHeartPickup(boolean fromBlue) {
+            double x = ARENA_LEFT + 58 + random.nextDouble() * (ARENA_WIDTH - 116);
+            double y = ARENA_TOP + 58 + random.nextDouble() * (ARENA_HEIGHT - 116);
+            heartPickups.add(new HeartPickup(fromBlue, x, y, SERAPH_HEART_DURATION));
+        }
+
+        private int healFighter(Fighter fighter, double amount) {
+            if (amount <= 0 || fighter.hp >= fighter.maxHp) {
+                return 0;
+            }
+            double total = amount + fighter.healCarry;
+            int heal = (int) total;
+            fighter.healCarry = total - heal;
+            if (heal <= 0) {
+                return 0;
+            }
+            int oldHp = fighter.hp;
+            fighter.hp = Math.min(fighter.maxHp, fighter.hp + heal);
+            return fighter.hp - oldHp;
+        }
+
+        private void updatePassiveEffects(double seconds) {
+            updateFighterPassiveTimers(blue, seconds);
+            updateFighterPassiveTimers(red, seconds);
+            spawnTailFlameTrailIfNeeded(blue, seconds);
+            spawnTailFlameTrailIfNeeded(red, seconds);
+            updateFlameTrails(seconds);
+        }
+
+        private void updateFighterPassiveTimers(Fighter fighter, double seconds) {
+            fighter.blueGlowResonanceRemaining = Math.max(0, fighter.blueGlowResonanceRemaining - seconds);
+            if (fighter.blueGlowResonanceRemaining <= 0) {
+                fighter.blueGlowResonanceStacks = 0;
+            }
+            fighter.blueGlowIonLockRemaining = Math.max(0, fighter.blueGlowIonLockRemaining - seconds);
+            fighter.tailFlameTrailCooldown = Math.max(0, fighter.tailFlameTrailCooldown - seconds);
+        }
+
+        private void spawnTailFlameTrailIfNeeded(Fighter fighter, double seconds) {
+            if (aircraftFor(fighter) != Aircraft.TAIL_FLAME || !fighter.boosting || fighter.tailFlameTrailCooldown > 0) {
+                return;
+            }
+            Fighter enemy = fighter == blue ? red : blue;
+            double dx = enemy.x - fighter.x;
+            double dy = enemy.y - fighter.y;
+            double angle = Math.atan2(dy, dx);
+            double trailX = fighter.x - Math.cos(angle) * 30;
+            double trailY = fighter.y - Math.sin(angle) * 30;
+            flameTrails.add(new FlameTrail(fighter == blue, trailX, trailY));
+            fighter.tailFlameTrailCooldown = TAIL_FLAME_TRAIL_INTERVAL;
+        }
+
+        private void updateFlameTrails(double seconds) {
+            Iterator<FlameTrail> iterator = flameTrails.iterator();
+            while (iterator.hasNext()) {
+                FlameTrail trail = iterator.next();
+                trail.remaining -= seconds;
+                if (trail.remaining <= 0) {
+                    iterator.remove();
+                    continue;
+                }
+                Fighter target = trail.fromBlue ? red : blue;
+                if (Math.hypot(target.x - trail.x, target.y - trail.y) <= TAIL_FLAME_TRAIL_RADIUS + FIGHTER_SIZE / 2.0) {
+                    double total = TAIL_FLAME_TRAIL_DAMAGE_PER_SECOND * seconds + trail.damageCarry;
+                    int damage = (int) total;
+                    trail.damageCarry = total - damage;
+                    if (damage > 0) {
+                        applyDamage(target, damage, AmmoType.LASER, LaserType.NONE);
+                        checkWinner();
+                    }
+                }
+            }
+        }
+
+        private void applyHitPassives(Fighter attacker, Fighter target, Projectile projectile) {
+            Aircraft attackerAircraft = aircraftFor(attacker);
+            if (attackerAircraft == Aircraft.BLUE_GLOW && !projectile.skill) {
+                applyBlueGlowResonance(target);
+            } else if (attackerAircraft == Aircraft.VENUS && !projectile.skill) {
+                addVenusShard(attacker);
+            }
+        }
+
+        private void applyBlueGlowResonance(Fighter target) {
+            target.blueGlowResonanceStacks++;
+            target.blueGlowResonanceRemaining = BLUE_GLOW_RESONANCE_DURATION;
+            if (target.blueGlowResonanceStacks < BLUE_GLOW_RESONANCE_TRIGGER_STACKS) {
+                return;
+            }
+            target.blueGlowResonanceStacks = 0;
+            target.blueGlowResonanceRemaining = 0;
+            target.blueGlowIonLockRemaining = BLUE_GLOW_ION_LOCK_DURATION;
+            target.boosting = false;
+            target.boostEnergy = Math.max(0, target.boostEnergy - BLUE_GLOW_ION_BOOST_DRAIN);
+            showFloatingText(target.x, target.y - 48, text("离子干扰", "Ion Lock"), new Color(116, 232, 255));
+        }
+
+        private void addVenusShard(Fighter fighter) {
+            if (fighter.venusShardCount >= VENUS_MAX_SHARDS) {
+                return;
+            }
+            fighter.venusShardCount++;
+            showFloatingText(fighter.x, fighter.y - 48, text("星尘护片", "Star Shard"), new Color(255, 214, 96));
+        }
+
         private void updateActiveArmors(double seconds) {
             red.updateArmors(seconds);
             blue.updateArmors(seconds);
@@ -850,6 +1400,8 @@ public class JetBattleGame {
                 message = fighterDisplayName(blue) + " is compressing a neutron orb.";
             } else if (playerAircraft == Aircraft.VENUS) {
                 activateVenusArmor(blue);
+            } else if (playerAircraft == Aircraft.SIX_WINGED_ANGEL) {
+                activateSeraphZone(blue, targetX, targetY);
             } else {
                 int damage = tailFlameMissileDamage(blue);
                 fireTailFlameWingMissiles(blue, red, mouseX, mouseY, damage);
@@ -867,6 +1419,7 @@ public class JetBattleGame {
             if (choosingDifficulty || paused || gameOver || aiLaserRemaining > 0 || aiBlueBurstShotsRemaining > 0) {
                 return;
             }
+            Point2D aim = predictedAimPoint(red, blue, aiAircraft);
 
             if (aiAircraft == Aircraft.BLUE_GLOW) {
                 if (red.charge >= MAX_CHARGE) {
@@ -891,7 +1444,7 @@ public class JetBattleGame {
                         pendingBlueGlowAmmoType = AmmoType.BULLET;
                         pendingBlueGlowLaserType = LaserType.NONE;
                         int damage = blueGlowAttackDamage(red, false, aiBlueBurstMultiplier);
-                        fireBlueGlowLasers(red, blue, blue.x, blue.y, damage, text("蓝光", "Blue Glow"));
+                        fireBlueGlowLasers(red, blue, aim.x, aim.y, damage, text("蓝光", "Blue Glow"));
                         message = fighterDisplayName(red) + " AI fired twin wing lasers.";
                     }
                 }
@@ -902,7 +1455,7 @@ public class JetBattleGame {
                     aiNeutronSkillWindupRemaining = NEUTRON_SKILL_WINDUP_DURATION;
                     message = fighterDisplayName(red) + " AI is compressing a neutron orb.";
                 } else {
-                    fireNeutronStarShot(red, blue, blue.x, blue.y, false);
+                    fireNeutronStarShot(red, blue, aim.x, aim.y, false);
                     message = fighterDisplayName(red) + " AI fired a neutron shot.";
                 }
             } else if (aiAircraft == Aircraft.VENUS) {
@@ -911,18 +1464,85 @@ public class JetBattleGame {
                     red.chargeCarry = 0;
                     activateVenusArmor(red);
                 } else {
-                    fireVenusShot(red, blue, blue.x, blue.y, false);
+                    fireVenusShot(red, blue, aim.x, aim.y, false);
+                }
+            } else if (aiAircraft == Aircraft.SIX_WINGED_ANGEL) {
+                if (red.charge >= MAX_CHARGE) {
+                    red.charge = 0;
+                    red.chargeCarry = 0;
+                    Point2D zoneTarget = red.hp < red.maxHp * 0.72
+                            ? new Point2D(red.x, red.y)
+                            : new Point2D(red.x * 0.55 + aim.x * 0.45, red.y * 0.55 + aim.y * 0.45);
+                    activateSeraphZone(red, zoneTarget.x, zoneTarget.y);
+                    message = fighterDisplayName(red) + " AI opened a healing field.";
+                } else {
+                    fireSeraphShot(red, blue, aim.x, aim.y, false);
+                    message = fighterDisplayName(red) + " AI fired a holy beam.";
                 }
             } else if (red.charge >= MAX_CHARGE) {
                 int damage = tailFlameMissileDamage(red);
                 red.charge = 0;
                 red.chargeCarry = 0;
-                fireTailFlameWingMissiles(red, blue, blue.x, blue.y, damage);
+                fireTailFlameWingMissiles(red, blue, aim.x, aim.y, damage);
                 message = fighterDisplayName(red) + " AI launched six homing missiles.";
             } else {
-                fireTailFlameShot(red, blue, blue.x, blue.y, false);
+                fireTailFlameShot(red, blue, aim.x, aim.y, false);
                 message = fighterDisplayName(red) + " AI fired a homing shot.";
             }
+        }
+
+        private Point2D predictedAimPoint(Fighter attacker, Fighter target, Aircraft attackerAircraft) {
+            double projectileSpeed = switch (attackerAircraft) {
+                case BLUE_GLOW -> BLUE_GLOW_PROJECTILE_SPEED;
+                case TAIL_FLAME -> HOMING_PROJECTILE_SPEED;
+                case VENUS -> venusArmorActive(attacker) ? 980 : 900;
+                case SIX_WINGED_ANGEL -> SERAPH_PROJECTILE_SPEED;
+                case NEUTRON_STAR -> BEAM_PROJECTILE_SPEED;
+            };
+            double distance = Math.hypot(target.x - attacker.x, target.y - attacker.y);
+            double leadTime = clamp(distance / projectileSpeed, 0.12, 0.75);
+            Point2D velocity = estimatedFighterVelocity(target);
+            double accuracy = difficulty == Difficulty.HARD ? 0.84 : difficulty == Difficulty.MEDIUM ? 0.70 : 0.54;
+            double predictedX = target.x + velocity.x * leadTime * accuracy;
+            double predictedY = target.y + velocity.y * leadTime * accuracy;
+            return new Point2D(
+                    clamp(predictedX, ARENA_LEFT + FIGHTER_SIZE / 2.0, ARENA_LEFT + ARENA_WIDTH - FIGHTER_SIZE / 2.0),
+                    clamp(predictedY, ARENA_TOP + FIGHTER_SIZE / 2.0, ARENA_TOP + ARENA_HEIGHT - FIGHTER_SIZE / 2.0)
+            );
+        }
+
+        private Point2D estimatedFighterVelocity(Fighter fighter) {
+            if (titleDemoMode) {
+                Fighter target = fighter == blue ? red : blue;
+                double dx = target.x - fighter.x;
+                double dy = target.y - fighter.y;
+                double length = Math.hypot(dx, dy);
+                double speed = effectiveSpeed(fighter) * 0.65;
+                return length > 0 ? new Point2D(dx / length * speed, dy / length * speed) : new Point2D(0, 0);
+            }
+            if (fighter != blue) {
+                return new Point2D(0, 0);
+            }
+            double dx = 0;
+            double dy = 0;
+            if (pressedKeys.contains(keyUp)) {
+                dy--;
+            }
+            if (pressedKeys.contains(keyDown)) {
+                dy++;
+            }
+            if (pressedKeys.contains(keyLeft)) {
+                dx--;
+            }
+            if (pressedKeys.contains(keyRight)) {
+                dx++;
+            }
+            double length = Math.hypot(dx, dy);
+            if (length == 0) {
+                return new Point2D(0, 0);
+            }
+            double speed = effectiveSpeed(fighter) * (fighter.boosting ? BOOST_SPEED_MULTIPLIER : 1.0);
+            return new Point2D(dx / length * speed, dy / length * speed);
         }
 
         private void fireTailFlameShot(Fighter attacker, Fighter target, double targetX, double targetY, boolean fromPlayer) {
@@ -996,7 +1616,7 @@ public class JetBattleGame {
                 dy = 0;
                 length = 1;
             }
-            double speed = enhanced ? 780 : 720;
+            double speed = enhanced ? 980 : 900;
             Projectile projectile = new Projectile(
                     startX,
                     startY,
@@ -1021,6 +1641,31 @@ public class JetBattleGame {
             projectile.venusEnhancedLaser = enhanced;
             projectile.piercing = enhanced;
             projectiles.add(projectile);
+        }
+
+        private void fireSeraphShot(Fighter attacker, Fighter target, double targetX, double targetY, boolean fromPlayer) {
+            int damage = Math.max(1, (int) Math.round(
+                    effectiveAttack(attacker) * SERAPH_ATTACK_MULTIPLIER
+                            - effectiveDefense(target) * SERAPH_DEFENSE_FACTOR));
+            playFireSound(AmmoType.BULLET);
+            double angle = Math.atan2(targetY - attacker.y, targetX - attacker.x);
+            Point2D nose = transformPoint(attacker.x, attacker.y, angle, 30, 0);
+            Projectile projectile = createProjectileFrom(nose.x, nose.y, attacker, targetX, targetY,
+                    damage, false, false, false, 0, target,
+                    aircraftFor(attacker).color,
+                    fighterDisplayName(attacker) + " holy round hit for " + damage + " damage.",
+                    1.0, AmmoType.BULLET, LaserType.NONE);
+            projectile.seraphBullet = true;
+            projectiles.add(projectile);
+            message = fighterDisplayName(fromPlayer ? blue : red) + " fired a holy round.";
+        }
+
+        private void activateSeraphZone(Fighter fighter, double targetX, double targetY) {
+            double x = clamp(targetX, ARENA_LEFT + SERAPH_ZONE_RADIUS, ARENA_LEFT + ARENA_WIDTH - SERAPH_ZONE_RADIUS);
+            double y = clamp(targetY, ARENA_TOP + SERAPH_ZONE_RADIUS, ARENA_TOP + ARENA_HEIGHT - SERAPH_ZONE_RADIUS);
+            seraphZones.add(new SeraphZone(fighter == blue, x, y, SERAPH_ZONE_RADIUS, SERAPH_ZONE_DURATION));
+            playSkillSound();
+            message = fighterDisplayName(fighter) + " opened a healing field.";
         }
 
         private void fireNeutronStarSkillOrb(Fighter attacker, Fighter target, double targetX, double targetY) {
@@ -1125,7 +1770,8 @@ public class JetBattleGame {
             pendingBlueGlowAmmoType = AmmoType.LASER;
             pendingBlueGlowLaserType = LaserType.NON_CONTINUOUS;
             int damage = blueGlowAttackDamage(red, true, aiBlueBurstMultiplier);
-            fireBlueGlowLasers(red, blue, blue.x, blue.y, damage, text("蓝光", "Blue Glow"));
+            Point2D aim = predictedAimPoint(red, blue, Aircraft.BLUE_GLOW);
+            fireBlueGlowLasers(red, blue, aim.x, aim.y, damage, text("蓝光", "Blue Glow"));
             aiBlueBurstMultiplier = Math.max(BLUE_MIN_BURST_MULTIPLIER, aiBlueBurstMultiplier - BLUE_BURST_MULTIPLIER_DROP);
             aiBlueBurstShotsRemaining--;
             nextAiBlueShotTime = now + BLUE_FIRE_INTERVAL;
@@ -1157,7 +1803,8 @@ public class JetBattleGame {
             if (aiNeutronSkillWindupRemaining > 0) {
                 aiNeutronSkillWindupRemaining = Math.max(0, aiNeutronSkillWindupRemaining - seconds);
                 if (aiNeutronSkillWindupRemaining == 0) {
-                    fireNeutronStarSkillOrb(red, blue, blue.x, blue.y);
+                    Point2D aim = predictedAimPoint(red, blue, Aircraft.NEUTRON_STAR);
+                    fireNeutronStarSkillOrb(red, blue, aim.x, aim.y);
                 }
             }
         }
@@ -1172,12 +1819,20 @@ public class JetBattleGame {
                 return;
             }
             fighter.neutronPullRemaining = Math.max(0, fighter.neutronPullRemaining - seconds);
-            fighter.neutronOrbitAngle += (2.8 + Math.sin(fighter.neutronPullRemaining * 7.0) * 0.65) * seconds;
-            fighter.neutronOrbitRadius = Math.max(24, fighter.neutronOrbitRadius - 9.0 * seconds + Math.sin(fighter.neutronPullRemaining * 11.0) * 0.9);
-            double wobbleX = Math.sin(fighter.neutronPullRemaining * 13.0) * 8.0;
-            double wobbleY = Math.cos(fighter.neutronPullRemaining * 9.0) * 6.0;
-            double targetX = fighter.neutronPullX + Math.cos(fighter.neutronOrbitAngle) * fighter.neutronOrbitRadius + wobbleX;
-            double targetY = fighter.neutronPullY + Math.sin(fighter.neutronOrbitAngle) * fighter.neutronOrbitRadius + wobbleY;
+            double pullDx = fighter.neutronPullX - fighter.x;
+            double pullDy = fighter.neutronPullY - fighter.y;
+            double distance = Math.hypot(pullDx, pullDy);
+            fighter.neutronOrbitAngle += seconds * (2.2 + Math.min(1.4, distance / 140.0));
+            double desiredRadius = Math.max(34, fighter.neutronOrbitRadius - seconds * 34.0);
+            fighter.neutronOrbitRadius = desiredRadius;
+            double orbitX = fighter.neutronPullX + Math.cos(fighter.neutronOrbitAngle) * desiredRadius;
+            double orbitY = fighter.neutronPullY + Math.sin(fighter.neutronOrbitAngle) * desiredRadius;
+            double blend = Math.min(1.0, (3.4 + distance / 110.0) * seconds);
+            double wobbleScale = Math.min(1.0, distance / 90.0);
+            double wobbleX = Math.sin(fighter.neutronPullRemaining * 15.5) * 4.0 * wobbleScale;
+            double wobbleY = Math.cos(fighter.neutronPullRemaining * 12.5) * 3.2 * wobbleScale;
+            double targetX = fighter.x + (orbitX - fighter.x) * blend + wobbleX;
+            double targetY = fighter.y + (orbitY - fighter.y) * blend + wobbleY;
             fighter.x = clamp(targetX, ARENA_LEFT + FIGHTER_SIZE / 2.0, ARENA_LEFT + ARENA_WIDTH - FIGHTER_SIZE / 2.0);
             fighter.y = clamp(targetY, ARENA_TOP + FIGHTER_SIZE / 2.0, ARENA_TOP + ARENA_HEIGHT - FIGHTER_SIZE / 2.0);
         }
@@ -1262,7 +1917,7 @@ public class JetBattleGame {
                 }
                 double pullX = orbDx / pullLength;
                 double pullY = orbDy / pullLength;
-                double influence = (1.0 - distance / NEUTRON_ORB_DEFLECT_RADIUS) * 0.62;
+                double influence = Math.min(0.96, (1.0 - distance / NEUTRON_ORB_DEFLECT_RADIUS) * 1.05);
                 double newX = nx + (pullX - nx) * influence;
                 double newY = ny + (pullY - ny) * influence;
                 double newLength = Math.hypot(newX, newY);
@@ -1280,8 +1935,8 @@ public class JetBattleGame {
                 if (bendSign == 0) {
                     bendSign = 1;
                 }
-                double bend = 52 * influence * bendSign;
-                double controlDistance = Math.min(180, Math.max(60, deflectDistance * 0.35));
+                double bend = 92 * influence * bendSign;
+                double controlDistance = Math.min(240, Math.max(80, deflectDistance * 0.42));
                 double controlX = closestX + (nx + deflectX) * 0.5 * controlDistance + sideX * bend;
                 double controlY = closestY + (ny + deflectY) * 0.5 * controlDistance + sideY * bend;
                 return new LaserPath(shooter.x, shooter.y, closestX, closestY, controlX, controlY, endX, endY, true);
@@ -1348,6 +2003,13 @@ public class JetBattleGame {
         private void fireProjectileFrom(double startX, double startY, Fighter attacker, double targetX, double targetY, int damage, boolean skill,
                                         boolean missile, boolean homing, double homingStrength, Fighter homingTarget, Color color, String hitMessage,
                                         double chargeMultiplier, AmmoType ammoType, LaserType laserType) {
+            projectiles.add(createProjectileFrom(startX, startY, attacker, targetX, targetY, damage, skill,
+                    missile, homing, homingStrength, homingTarget, color, hitMessage, chargeMultiplier, ammoType, laserType));
+        }
+
+        private Projectile createProjectileFrom(double startX, double startY, Fighter attacker, double targetX, double targetY, int damage, boolean skill,
+                                                boolean missile, boolean homing, double homingStrength, Fighter homingTarget, Color color, String hitMessage,
+                                                double chargeMultiplier, AmmoType ammoType, LaserType laserType) {
             double dx = targetX - startX;
             double dy = targetY - startY;
             double length = Math.hypot(dx, dy);
@@ -1357,7 +2019,7 @@ public class JetBattleGame {
                 length = 1;
             }
 
-            fireProjectileWithVectorFrom(startX, startY, attacker, dx / length, dy / length, damage, skill, missile, homing, homingStrength,
+            return createProjectileWithVectorFrom(startX, startY, attacker, dx / length, dy / length, damage, skill, missile, homing, homingStrength,
                     homingTarget, color, hitMessage, chargeMultiplier, ammoType, laserType);
         }
 
@@ -1377,6 +2039,13 @@ public class JetBattleGame {
         private void fireProjectileWithVectorFrom(double startX, double startY, Fighter attacker, double dx, double dy, int damage, boolean skill,
                                                   boolean missile, boolean homing, double homingStrength, Fighter homingTarget, Color color,
                                                   String hitMessage, double chargeMultiplier, AmmoType ammoType, LaserType laserType) {
+            projectiles.add(createProjectileWithVectorFrom(startX, startY, attacker, dx, dy, damage, skill, missile, homing,
+                    homingStrength, homingTarget, color, hitMessage, chargeMultiplier, ammoType, laserType));
+        }
+
+        private Projectile createProjectileWithVectorFrom(double startX, double startY, Fighter attacker, double dx, double dy, int damage, boolean skill,
+                                                          boolean missile, boolean homing, double homingStrength, Fighter homingTarget, Color color,
+                                                          String hitMessage, double chargeMultiplier, AmmoType ammoType, LaserType laserType) {
             double speed = homing
                     ? HOMING_PROJECTILE_SPEED
                     : (missile ? MISSILE_PROJECTILE_SPEED : beamProjectileSpeed(attacker));
@@ -1387,7 +2056,7 @@ public class JetBattleGame {
                 maxSpeed = TAIL_FLAME_SKILL_MISSILE_MAX_SPEED;
                 acceleration = TAIL_FLAME_SKILL_MISSILE_ACCELERATION;
             }
-            double radius = missile ? 10 : 6;
+            double radius = missile ? 12 : 7.5;
             Projectile projectile = new Projectile(
                     startX,
                     startY,
@@ -1410,11 +2079,21 @@ public class JetBattleGame {
             );
             projectile.maxSpeed = maxSpeed;
             projectile.acceleration = acceleration;
-            projectiles.add(projectile);
+            if (aircraftFor(attacker) == Aircraft.TAIL_FLAME && homing) {
+                projectile.homingTimeout = skill ? TAIL_FLAME_SKILL_HOMING_DURATION : TAIL_FLAME_NORMAL_HOMING_DURATION;
+            }
+            return projectile;
         }
 
         private double beamProjectileSpeed(Fighter attacker) {
-            return aircraftFor(attacker) == Aircraft.BLUE_GLOW ? BLUE_GLOW_PROJECTILE_SPEED : BEAM_PROJECTILE_SPEED;
+            Aircraft aircraft = aircraftFor(attacker);
+            if (aircraft == Aircraft.BLUE_GLOW) {
+                return BLUE_GLOW_PROJECTILE_SPEED;
+            }
+            if (aircraft == Aircraft.SIX_WINGED_ANGEL) {
+                return SERAPH_PROJECTILE_SPEED;
+            }
+            return BEAM_PROJECTILE_SPEED;
         }
 
         private boolean venusArmorActive(Fighter fighter) {
@@ -1428,11 +2107,22 @@ public class JetBattleGame {
         }
 
         private int effectiveDefense(Fighter fighter) {
-            return venusArmorActive(fighter) ? (int) Math.round(fighter.defense * VENUS_DEFENSE_BOOST) : fighter.defense;
+            double value = venusArmorActive(fighter) ? fighter.defense * VENUS_DEFENSE_BOOST : fighter.defense;
+            if (fighter.seraphDefenseDebuffRemaining > 0) {
+                value *= SERAPH_DEFENSE_DEBUFF_MULTIPLIER;
+            }
+            return Math.max(1, (int) Math.round(value));
         }
 
         private int effectiveSpeed(Fighter fighter) {
-            return venusArmorActive(fighter) ? (int) Math.round(fighter.speed * VENUS_SPEED_BOOST) : fighter.speed;
+            double value = venusArmorActive(fighter) ? fighter.speed * VENUS_SPEED_BOOST : fighter.speed;
+            if (fighter.seraphSpeedBuffRemaining > 0) {
+                value *= SERAPH_SPEED_BUFF_MULTIPLIER;
+            }
+            if (fighter.seraphSpeedDebuffRemaining > 0) {
+                value *= SERAPH_SPEED_DEBUFF_MULTIPLIER;
+            }
+            return Math.max(1, (int) Math.round(value));
         }
 
         private int normalDamage(Fighter attacker, Fighter defender) {
@@ -1481,6 +2171,12 @@ public class JetBattleGame {
                 target.venusArmorHp -= absorbed;
                 finalDamage -= absorbed;
                 showVenusArmorReaction(target);
+            }
+            if (finalDamage > 0 && aircraftFor(target) == Aircraft.VENUS && target.venusShardCount > 0) {
+                int absorbed = Math.min(finalDamage, VENUS_SHARD_ABSORB);
+                finalDamage -= absorbed;
+                target.venusShardCount--;
+                showFloatingText(target.x, target.y - 46, text("护片 -" + absorbed, "Shard -" + absorbed), new Color(255, 214, 96));
             }
             if (finalDamage > 0) {
                 target.hp = Math.max(0, target.hp - finalDamage);
@@ -1545,6 +2241,9 @@ public class JetBattleGame {
         }
 
         private void playFireSound(AmmoType ammoType) {
+            if (titleDemoMode) {
+                return;
+            }
             audio.beginImmediateSequence();
             if (ammoType == AmmoType.MISSILE) {
                 audio.playSweep(190, 90, 170, 0.52, 0.55);
@@ -1557,6 +2256,9 @@ public class JetBattleGame {
         }
 
         private void playVenusLaserSound(boolean enhanced) {
+            if (titleDemoMode) {
+                return;
+            }
             audio.beginImmediateSequence();
             if (enhanced) {
                 audio.playSweep(620, 1380, 105, 0.50, 0.32);
@@ -1569,16 +2271,25 @@ public class JetBattleGame {
         }
 
         private void playSkillSound() {
+            if (titleDemoMode) {
+                return;
+            }
             audio.beginImmediateSequence();
             audio.playSweep(260, 920, 260, 0.48, 0.25);
             audio.playTone(1180, 170, 0.34, 0.15);
         }
 
         private void playHitSound() {
+            if (titleDemoMode) {
+                return;
+            }
             audio.playSweep(160, 70, 95, 0.42, 0.75);
         }
 
         private void playShieldSound() {
+            if (titleDemoMode) {
+                return;
+            }
             audio.playTone(520, 110, 0.30, 0.10);
             audio.playTone(980, 130, 0.28, 0.08);
         }
@@ -1588,10 +2299,16 @@ public class JetBattleGame {
         }
 
         private void playBoostSound() {
+            if (titleDemoMode) {
+                return;
+            }
             audio.playSweep(180, 360, 120, 0.34, 0.70);
         }
 
         private void playBoostMaxSpeedSound() {
+            if (titleDemoMode) {
+                return;
+            }
             audio.playTone(1480, 90, 0.30, 0.18);
             audio.playSweep(920, 1320, 150, 0.24, 0.12);
         }
@@ -1603,6 +2320,9 @@ public class JetBattleGame {
         }
 
         private void checkWinner() {
+            if (titleDemoMode) {
+                return;
+            }
             if (gameOver) {
                 return;
             }
@@ -1638,13 +2358,16 @@ public class JetBattleGame {
             aiAircraft = aiAircraftConfirmed ? Aircraft.values()[selectedAiAircraftIndex] : randomAiAircraft();
             blue.applyAircraft(playerAircraft);
             red.applyAircraft(aiAircraft);
-            red.attack = difficulty.aiAttack;
-            red.speed = difficulty.aiSpeed;
+            red.attack = difficulty.adjustAttack(aiAircraft.attack);
+            red.speed = difficulty.adjustSpeed(aiAircraft.speed);
             red.reset();
             blue.reset();
             configureAiAttackTimer();
             projectiles.clear();
             shieldPickups.clear();
+            seraphZones.clear();
+            heartPickups.clear();
+            flameTrails.clear();
             floatingTexts.clear();
             pressedKeys.clear();
             blueLaserWindupRemaining = 0;
@@ -1681,6 +2404,8 @@ public class JetBattleGame {
             nextPlayerAttackTime = 0;
             nextPlayerNormalAttackTime = 0;
             shieldSpawnTimer = 1.4;
+            blueHeartSpawnTimer = SERAPH_HEART_SPAWN_INTERVAL * 0.55;
+            redHeartSpawnTimer = SERAPH_HEART_SPAWN_INTERVAL * 0.75;
             setInputMethodLocked(true);
             message = difficulty.displayName(chinese) + " mode. WASD move, aim with cursor, fire with mouse.";
             audio.setVolume(volume);
@@ -1691,13 +2416,27 @@ public class JetBattleGame {
         }
 
         private void configureAiAttackTimer() {
-            int minimumAiInterval = aiAircraft == Aircraft.TAIL_FLAME ? TAIL_FLAME_ATTACK_COOLDOWN : NORMAL_ATTACK_COOLDOWN;
-            int aiInterval = Math.max(minimumAiInterval, difficulty.aiAttackInterval);
-            if (aiAircraft == Aircraft.VENUS && venusArmorActive(red)) {
-                aiInterval = Math.max(VENUS_ENHANCED_ATTACK_COOLDOWN, difficulty.aiAttackInterval - 250);
-            }
+            int baseInterval = baseAiAttackInterval();
+            int aiInterval = difficulty.adjustAttackInterval(baseInterval);
+            aiInterval = Math.max(250, aiInterval);
             aiTimer.setDelay(aiInterval);
             aiTimer.setInitialDelay(aiInterval);
+        }
+
+        private int baseAiAttackInterval() {
+            if (aiAircraft == Aircraft.VENUS && venusArmorActive(red)) {
+                return VENUS_ENHANCED_ATTACK_COOLDOWN;
+            }
+            if (aiAircraft == Aircraft.TAIL_FLAME) {
+                return TAIL_FLAME_ATTACK_COOLDOWN;
+            }
+            if (aiAircraft == Aircraft.VENUS) {
+                return VENUS_ATTACK_COOLDOWN;
+            }
+            if (aiAircraft == Aircraft.SIX_WINGED_ANGEL) {
+                return NORMAL_ATTACK_COOLDOWN;
+            }
+            return NORMAL_ATTACK_COOLDOWN;
         }
 
         private Aircraft randomAiAircraft() {
@@ -1711,6 +2450,9 @@ public class JetBattleGame {
             blue.reset();
             projectiles.clear();
             shieldPickups.clear();
+            seraphZones.clear();
+            heartPickups.clear();
+            flameTrails.clear();
             floatingTexts.clear();
             pressedKeys.clear();
             blueLaserWindupRemaining = 0;
@@ -1733,10 +2475,13 @@ public class JetBattleGame {
             chargeInputDown = false;
             draggingVolume = false;
             blueBurstQueued = false;
+            blueHeartSpawnTimer = SERAPH_HEART_SPAWN_INTERVAL;
+            redHeartSpawnTimer = SERAPH_HEART_SPAWN_INTERVAL;
             aiWantsBoost = false;
             aiBoostDecisionTimer = 0;
             choosingDifficulty = true;
             showingHangar = false;
+            showingMapSelection = false;
             paused = false;
             gameOver = false;
             playerWon = false;
@@ -1779,9 +2524,17 @@ public class JetBattleGame {
             g.translate(renderOffsetX, renderOffsetY);
             g.scale(renderScale, renderScale);
 
+            if (titleScreen) {
+                drawTitleScreen(g);
+                g.dispose();
+                return;
+            }
+
             if (choosingDifficulty) {
                 if (showingHangar) {
                     drawHangar(g);
+                } else if (showingMapSelection) {
+                    drawMapSelection(g);
                 } else {
                     drawDifficultySelection(g);
                 }
@@ -1789,10 +2542,13 @@ public class JetBattleGame {
                 return;
             }
 
-            drawTitle(g);
-            drawPauseButton(g);
             drawArena(g);
+            drawBattleMapName(g);
+            drawPauseButton(g);
+            drawFlameTrails(g);
+            drawSeraphZones(g);
             drawShieldPickups(g);
+            drawHeartPickups(g);
             drawAimLine(g);
             drawBlueLaser(g);
             drawProjectiles(g);
@@ -1805,8 +2561,8 @@ public class JetBattleGame {
             if (explosionActive) {
                 drawExplosion(g);
             }
-            drawFighter(g, red, 90, 460, aiAircraft.color);
-            drawFighter(g, blue, 600, 460, playerAircraft.color);
+            drawFighter(g, red, 24, 592, aiAircraft.color);
+            drawFighter(g, blue, 698, 592, playerAircraft.color);
             drawFloatingTexts(g);
             drawMessage(g);
             if (paused) {
@@ -1887,6 +2643,45 @@ public class JetBattleGame {
             }
         }
 
+        private void drawTitleScreen(Graphics2D g) {
+            BattleMap map = BattleMap.values()[titleMapIndex];
+
+            long now = System.currentTimeMillis();
+            drawArena(g, map);
+            drawFlameTrails(g);
+            drawSeraphZones(g);
+            drawHeartPickups(g);
+            drawBlueLaser(g);
+            drawProjectiles(g);
+            drawFighterAvatar(g, red, aiAircraft.color);
+            drawFighterAvatar(g, blue, playerAircraft.color);
+
+            g.setFont(new Font("SansSerif", Font.BOLD, 68));
+            FontMetrics titleMetrics = g.getFontMetrics();
+            String title = "星际战机";
+            int titleX = (WIDTH - titleMetrics.stringWidth(title)) / 2;
+            int titleY = 170;
+            g.setColor(new Color(79, 220, 255, 70));
+            g.drawString(title, titleX - 3, titleY + 3);
+            g.setColor(new Color(255, 214, 82, 80));
+            g.drawString(title, titleX + 3, titleY - 2);
+            g.setColor(new Color(238, 248, 255));
+            g.drawString(title, titleX, titleY);
+            g.setStroke(new BasicStroke(2.2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            g.setColor(new Color(118, 226, 255, 190));
+            g.drawLine(titleX + 10, titleY + 15, titleX + titleMetrics.stringWidth(title) - 10, titleY + 15);
+            g.setColor(new Color(255, 199, 68, 190));
+            g.drawLine(titleX + 58, titleY + 25, titleX + titleMetrics.stringWidth(title) - 58, titleY + 25);
+
+            double pulse = 0.62 + 0.38 * Math.sin(now / 420.0);
+            g.setFont(new Font("SansSerif", Font.BOLD, 22));
+            g.setColor(new Color(238, 246, 255, (int) Math.round(155 + 80 * pulse)));
+            drawCenteredText(g, text("点击任意处开始游戏", "Click anywhere to start"), 575);
+            g.setFont(new Font("SansSerif", Font.PLAIN, 14));
+            g.setColor(new Color(170, 188, 214));
+            drawCenteredText(g, "F11 Fullscreen", 606);
+        }
+
         private void drawDifficultySelection(Graphics2D g) {
             drawArenaBackdrop(g);
             drawSettingsButton(g);
@@ -1907,6 +2702,8 @@ public class JetBattleGame {
             if (difficultyMenuOpen) {
                 y = drawDifficultyOptions(g, panelX, y, panelW) + 16;
             }
+            y = drawMenuHeader(g, text("地图", "Map"), selectedMap().displayName(chinese), panelX, y, panelW,
+                    selectedMenuSection == 2, false) + 16;
 
             g.setFont(new Font("SansSerif", Font.PLAIN, 17));
             g.setColor(new Color(196, 207, 224));
@@ -1928,6 +2725,82 @@ public class JetBattleGame {
             g.setFont(new Font("SansSerif", Font.BOLD, 15));
             g.setColor(Color.WHITE);
             drawCenteredTextInBox(g, text("机库", "HANGAR"), HANGAR_BUTTON_X, HANGAR_BUTTON_WIDTH, 667);
+            if (settingsOpen) {
+                drawSettingsPanel(g);
+            }
+        }
+
+        private BattleMap selectedMap() {
+            return BattleMap.values()[selectedMapIndex];
+        }
+
+        private void drawMapSelection(Graphics2D g) {
+            drawArenaBackdrop(g);
+            drawSettingsButton(g);
+
+            g.setFont(new Font("SansSerif", Font.BOLD, 34));
+            g.setColor(new Color(238, 244, 255));
+            drawCenteredText(g, text("地图选择", "MAP SELECT"), 72);
+
+            BattleMap[] maps = BattleMap.values();
+            int listX = 62;
+            int listY = 116;
+            int listW = 250;
+            int rowH = 70;
+            g.setFont(new Font("SansSerif", Font.BOLD, 18));
+            for (int i = 0; i < maps.length; i++) {
+                BattleMap map = maps[i];
+                int y = listY + i * (rowH + 10);
+                boolean previewed = i == previewMapIndex;
+                boolean selected = i == selectedMapIndex;
+                g.setColor(previewed ? new Color(34, 43, 60) : new Color(22, 27, 36));
+                g.fillRoundRect(listX, y, listW, rowH, 10, 10);
+                g.setColor(selected ? new Color(118, 226, 255) : previewed ? map.accent : new Color(82, 92, 112));
+                g.setStroke(new BasicStroke(selected ? 3f : previewed ? 2.2f : 1.4f));
+                g.drawRoundRect(listX, y, listW, rowH, 10, 10);
+
+                drawMapSwatch(g, map, listX + 14, y + 15, 52, 40);
+                g.setColor(Color.WHITE);
+                g.setFont(new Font("SansSerif", Font.BOLD, 15));
+                drawClippedString(g, map.displayName(chinese), listX + 78, y + 28, listW - 92);
+                g.setFont(new Font("SansSerif", Font.PLAIN, 12));
+                g.setColor(new Color(190, 202, 220));
+                drawClippedString(g, map.tagline(chinese), listX + 78, y + 52, listW - 92);
+            }
+
+            BattleMap preview = maps[previewMapIndex];
+            g.setColor(new Color(19, 24, 34));
+            g.fillRoundRect(340, 116, 520, 300, 12, 12);
+            g.setColor(preview.accent);
+            g.setStroke(new BasicStroke(2.4f));
+            g.drawRoundRect(340, 116, 520, 300, 12, 12);
+            drawBattleMap(g, preview, 360, 136, 480, 260, false);
+
+            g.setFont(new Font("SansSerif", Font.BOLD, 24));
+            g.setColor(Color.WHITE);
+            g.drawString(preview.displayName(chinese), 348, 464);
+            g.setFont(new Font("SansSerif", Font.PLAIN, 14));
+            g.setColor(new Color(198, 211, 229));
+            String[] lines = preview.details(chinese);
+            for (int i = 0; i < lines.length; i++) {
+                g.drawString(lines[i], 350, 496 + i * 24);
+            }
+
+            g.setColor(new Color(32, 130, 178));
+            g.fillRoundRect(502, 604, 180, 34, 10, 10);
+            g.setColor(new Color(118, 226, 255));
+            g.drawRoundRect(502, 604, 180, 34, 10, 10);
+            g.setFont(new Font("SansSerif", Font.BOLD, 15));
+            g.setColor(Color.WHITE);
+            drawCenteredTextInBox(g, text("使用地图", "USE MAP"), 502, 180, 626);
+
+            g.setColor(new Color(56, 70, 92));
+            g.fillRoundRect(282, 604, 180, 34, 10, 10);
+            g.setColor(new Color(142, 166, 204));
+            g.drawRoundRect(282, 604, 180, 34, 10, 10);
+            g.setColor(Color.WHITE);
+            drawCenteredTextInBox(g, text("返回", "BACK"), 282, 180, 626);
+
             if (settingsOpen) {
                 drawSettingsPanel(g);
             }
@@ -1967,7 +2840,7 @@ public class JetBattleGame {
             int listW = 250;
             int rowH = 72;
             Aircraft[] aircraft = Aircraft.values();
-            int visibleCount = Math.min(3, aircraft.length);
+            int visibleCount = hangarVisibleCount();
             hangarScrollIndex = clampScrollIndex(hangarScrollIndex, aircraft.length, visibleCount);
             g.setFont(new Font("SansSerif", Font.BOLD, 18));
             for (int slot = 0; slot < visibleCount; slot++) {
@@ -1990,8 +2863,10 @@ public class JetBattleGame {
                 drawClippedString(g, stats, listX + 84, y + 55, listW - 98);
                 g.setFont(new Font("SansSerif", Font.BOLD, 18));
             }
-            drawScrollArrows(g, listX + listW - 32, listY + visibleCount * (rowH + 12) + 2,
-                    hangarScrollIndex > 0, hangarScrollIndex + visibleCount < aircraft.length);
+            if (aircraft.length > visibleCount) {
+                drawScrollArrows(g, listX + listW - 32, listY + visibleCount * (rowH + 12) + 2,
+                        hangarScrollIndex > 0, hangarScrollIndex + visibleCount < aircraft.length);
+            }
 
             Aircraft selected = aircraft[hangarAircraftIndex];
             g.setColor(new Color(19, 24, 34));
@@ -2045,16 +2920,16 @@ public class JetBattleGame {
         private int drawAircraftInfoSection(Graphics2D g, String title, String[] lines, int x, int y, Color accent) {
             g.setColor(new Color(accent.getRed(), accent.getGreen(), accent.getBlue(), 75));
             g.fillRoundRect(x, y - 15, 248, 22, 6, 6);
-            g.setFont(new Font("SansSerif", Font.BOLD, 12));
+            g.setFont(new Font("SansSerif", Font.BOLD, 13));
             g.setColor(new Color(236, 242, 252));
             g.drawString(title, x + 8, y);
 
-            int lineY = y + 23;
-            g.setFont(new Font("SansSerif", Font.PLAIN, 12));
+            int lineY = y + 24;
+            g.setFont(new Font("SansSerif", Font.PLAIN, 13));
             g.setColor(new Color(198, 211, 229));
             for (String line : lines) {
                 drawClippedString(g, line, x + 4, lineY, 240);
-                lineY += 19;
+                lineY += 20;
             }
             return lineY;
         }
@@ -2391,6 +3266,10 @@ public class JetBattleGame {
             return Math.max(0, Math.min(index, Math.max(0, itemCount - visibleCount)));
         }
 
+        private int hangarVisibleCount() {
+            return Math.min(5, Aircraft.values().length);
+        }
+
         private void drawHorizontalScrollArrow(Graphics2D g, int x, int y, boolean right, boolean enabled) {
             g.setColor(enabled ? new Color(42, 55, 74) : new Color(28, 33, 42));
             g.fillRoundRect(x, y, 24, 32, 7, 7);
@@ -2446,6 +3325,7 @@ public class JetBattleGame {
 
         private int drawDifficultyOptions(Graphics2D g, int x, int y, int width) {
             Difficulty[] difficulties = Difficulty.values();
+            Aircraft previewAircraft = selectedAiAircraftIndex >= 0 ? Aircraft.values()[selectedAiAircraftIndex] : null;
             int cardW = 160;
             int gap = 18;
             int startX = x + (width - cardW * difficulties.length - gap * 2) / 2;
@@ -2464,11 +3344,127 @@ public class JetBattleGame {
                 drawCenteredTextInBox(g, option.displayName(chinese), cardX, cardW, y + 34);
                 g.setFont(new Font("SansSerif", Font.PLAIN, 13));
                 g.setColor(new Color(177, 188, 205));
-                g.drawString("AI ATK " + option.aiAttack, cardX + 22, y + 66);
-                g.drawString("AI SPD " + option.aiSpeed, cardX + 22, y + 90);
-                g.drawString("Fire " + option.aiAttackInterval + " ms", cardX + 22, y + 114);
+                if (previewAircraft == null) {
+                    g.drawString("ATK x" + option.formatMultiplier(option.attackMultiplier), cardX + 22, y + 66);
+                    g.drawString("SPD x" + option.formatMultiplier(option.speedMultiplier), cardX + 22, y + 90);
+                    g.drawString("Fire x" + option.formatMultiplier(option.intervalMultiplier), cardX + 22, y + 114);
+                } else {
+                    int baseInterval = previewAircraft == Aircraft.TAIL_FLAME ? TAIL_FLAME_ATTACK_COOLDOWN
+                            : previewAircraft == Aircraft.VENUS ? VENUS_ATTACK_COOLDOWN : NORMAL_ATTACK_COOLDOWN;
+                    g.drawString("AI ATK " + option.adjustAttack(previewAircraft.attack), cardX + 22, y + 66);
+                    g.drawString("AI SPD " + option.adjustSpeed(previewAircraft.speed), cardX + 22, y + 90);
+                    g.drawString("Fire " + option.adjustAttackInterval(baseInterval) + " ms", cardX + 22, y + 114);
+                }
             }
             return y + 140;
+        }
+
+        private void drawMapSwatch(Graphics2D g, BattleMap map, int x, int y, int width, int height) {
+            Shape oldClip = g.getClip();
+            g.setClip(x, y, width, height);
+            drawBattleMap(g, map, x, y, width, height, false);
+            g.setClip(oldClip);
+            g.setColor(new Color(220, 230, 245, 150));
+            g.setStroke(new BasicStroke(1.2f));
+            g.drawRoundRect(x, y, width, height, 8, 8);
+        }
+
+        private void drawBattleMap(Graphics2D g, BattleMap map, int x, int y, int width, int height, boolean gameplay) {
+            Shape oldClip = g.getClip();
+            g.setClip(x, y, width, height);
+            g.setColor(map.background);
+            g.fillRect(x, y, width, height);
+            BufferedImage image = mapImages.get(map);
+            if (image != null) {
+                drawCoverImage(g, image, x, y, width, height);
+                if (gameplay) {
+                    g.setColor(new Color(0, 0, 0, 74));
+                    g.fillRect(x, y, width, height);
+                } else {
+                    g.setColor(new Color(255, 255, 255, 22));
+                    g.fillRect(x, y, width, height);
+                }
+            } else {
+                switch (map) {
+                    case ORBITAL_DOCK -> drawOrbitalDockMap(g, x, y, width, height);
+                    case NEBULA_RIFT -> drawNebulaRiftMap(g, x, y, width, height);
+                    case CRYSTAL_FIELD -> drawCrystalFieldMap(g, x, y, width, height);
+                    case SOLAR_RELIC -> drawSolarRelicMap(g, x, y, width, height);
+                }
+            }
+
+            g.setClip(oldClip);
+        }
+
+        private void drawCoverImage(Graphics2D g, BufferedImage image, int x, int y, int width, int height) {
+            double scale = Math.max(width / (double) image.getWidth(), height / (double) image.getHeight());
+            int drawW = (int) Math.round(image.getWidth() * scale);
+            int drawH = (int) Math.round(image.getHeight() * scale);
+            int drawX = x + (width - drawW) / 2;
+            int drawY = y + (height - drawH) / 2;
+            g.drawImage(image, drawX, drawY, drawW, drawH, null);
+        }
+
+        private void drawOrbitalDockMap(Graphics2D g, int x, int y, int width, int height) {
+            g.setColor(new Color(42, 58, 77));
+            g.setStroke(new BasicStroke(2f));
+            for (int gx = x - 30; gx < x + width + 60; gx += 58) {
+                g.drawLine(gx, y, gx + 96, y + height);
+            }
+            for (int gy = y + 24; gy < y + height; gy += 54) {
+                g.drawLine(x, gy, x + width, gy);
+            }
+            g.setColor(new Color(91, 124, 154, 100));
+            g.fillRoundRect(x + width / 2 - 80, y + 28, 160, height - 56, 18, 18);
+            g.setColor(new Color(118, 226, 255, 125));
+            g.drawRoundRect(x + width / 2 - 80, y + 28, 160, height - 56, 18, 18);
+        }
+
+        private void drawNebulaRiftMap(Graphics2D g, int x, int y, int width, int height) {
+            g.setPaint(new RadialGradientPaint(x + width * 0.62f, y + height * 0.45f, width * 0.7f,
+                    new float[]{0f, 0.55f, 1f},
+                    new Color[]{new Color(91, 44, 128, 165), new Color(31, 52, 90, 120), new Color(13, 18, 30, 0)}));
+            g.fillRect(x, y, width, height);
+            g.setColor(new Color(226, 127, 255, 120));
+            g.setStroke(new BasicStroke(3.2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            g.drawArc(x + width / 2 - 170, y + height / 2 - 85, 340, 170, 205, 145);
+            g.setColor(new Color(110, 211, 255, 85));
+            for (int i = 0; i < 24; i++) {
+                int sx = x + (i * 67) % Math.max(1, width);
+                int sy = y + (i * 41) % Math.max(1, height);
+                g.fillOval(sx, sy, 2 + i % 3, 2 + i % 3);
+            }
+        }
+
+        private void drawCrystalFieldMap(Graphics2D g, int x, int y, int width, int height) {
+            g.setColor(new Color(65, 156, 180, 70));
+            for (int i = 0; i < 9; i++) {
+                int cx = x + 28 + (i * 73) % Math.max(1, width - 56);
+                int cy = y + 22 + (i * 47) % Math.max(1, height - 44);
+                int size = 18 + i % 4 * 8;
+                int[] xs = {cx, cx + size / 2, cx, cx - size / 2};
+                int[] ys = {cy - size, cy, cy + size, cy};
+                g.fillPolygon(xs, ys, 4);
+                g.setColor(new Color(150, 242, 255, 130));
+                g.drawPolygon(xs, ys, 4);
+                g.setColor(new Color(65, 156, 180, 70));
+            }
+        }
+
+        private void drawSolarRelicMap(Graphics2D g, int x, int y, int width, int height) {
+            g.setPaint(new RadialGradientPaint(x + width * 0.82f, y + height * 0.22f, width * 0.58f,
+                    new float[]{0f, 0.45f, 1f},
+                    new Color[]{new Color(255, 178, 58, 180), new Color(88, 48, 28, 80), new Color(18, 20, 26, 0)}));
+            g.fillRect(x, y, width, height);
+            g.setColor(new Color(255, 196, 77, 110));
+            g.setStroke(new BasicStroke(2f));
+            int cx = x + width / 2;
+            int cy = y + height / 2;
+            for (int r = 38; r < Math.min(width, height); r += 46) {
+                g.drawOval(cx - r, cy - r, r * 2, r * 2);
+            }
+            g.setColor(new Color(120, 86, 54, 155));
+            g.fillRoundRect(x + width / 2 - 100, y + height / 2 - 18, 200, 36, 12, 12);
         }
 
         private void drawArenaBackdrop(Graphics2D g) {
@@ -2505,20 +3501,24 @@ public class JetBattleGame {
             g.fillRoundRect(PAUSE_BUTTON_X + 24, PAUSE_BUTTON_Y + 10, 6, 22, 3, 3);
         }
 
+        private void drawBattleMapName(Graphics2D g) {
+            String name = selectedMap().displayName(chinese);
+            g.setFont(new Font("SansSerif", Font.BOLD, 16));
+            FontMetrics metrics = g.getFontMetrics();
+            int boxW = metrics.stringWidth(name) + 44;
+            int x = (WIDTH - boxW) / 2;
+            g.setColor(new Color(8, 12, 18, 132));
+            g.fillRoundRect(x, 22, boxW, 30, 10, 10);
+            g.setColor(new Color(224, 236, 252));
+            drawCenteredTextInBox(g, name, x, boxW, 42);
+        }
+
         private void drawArena(Graphics2D g) {
-            g.setColor(new Color(25, 29, 37));
-            g.fillRoundRect(ARENA_LEFT, ARENA_TOP, ARENA_WIDTH, ARENA_HEIGHT, 12, 12);
-            g.setColor(new Color(42, 58, 77));
-            g.setStroke(new BasicStroke(1));
-            for (int x = ARENA_LEFT + 24; x < ARENA_LEFT + ARENA_WIDTH; x += 48) {
-                g.drawLine(x, ARENA_TOP, x, ARENA_TOP + ARENA_HEIGHT);
-            }
-            for (int y = ARENA_TOP + 24; y < ARENA_TOP + ARENA_HEIGHT; y += 48) {
-                g.drawLine(ARENA_LEFT, y, ARENA_LEFT + ARENA_WIDTH, y);
-            }
-            g.setColor(new Color(68, 75, 90));
-            g.setStroke(new BasicStroke(2));
-            g.drawRoundRect(ARENA_LEFT, ARENA_TOP, ARENA_WIDTH, ARENA_HEIGHT, 12, 12);
+            drawArena(g, selectedMap());
+        }
+
+        private void drawArena(Graphics2D g, BattleMap map) {
+            drawBattleMap(g, map, ARENA_LEFT, ARENA_TOP, ARENA_WIDTH, ARENA_HEIGHT, true);
         }
 
         private void drawAimLine(Graphics2D g) {
@@ -2613,10 +3613,83 @@ public class JetBattleGame {
             }
         }
 
+        private void drawFlameTrails(Graphics2D g) {
+            for (FlameTrail trail : flameTrails) {
+                trail.draw(g);
+            }
+        }
+
         private void drawShieldPickups(Graphics2D g) {
             for (ShieldPickup pickup : shieldPickups) {
                 pickup.draw(g);
             }
+        }
+
+        private void drawSeraphZones(Graphics2D g) {
+            long now = System.currentTimeMillis();
+            for (SeraphZone zone : seraphZones) {
+                double lifeRatio = Math.max(0, zone.remaining / SERAPH_ZONE_DURATION);
+                double pulse = 0.5 + 0.5 * Math.sin(now / 180.0 + zone.x * 0.01);
+                int radius = (int) Math.round(zone.radius);
+                int alpha = (int) Math.round(34 + 18 * pulse);
+                Color ownerColor = zone.fromBlue ? new Color(118, 226, 255) : new Color(255, 118, 136);
+                g.setColor(new Color(255, 240, 246, alpha));
+                g.fillOval((int) Math.round(zone.x - radius), (int) Math.round(zone.y - radius), radius * 2, radius * 2);
+                g.setStroke(new BasicStroke(2.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                g.setColor(new Color(ownerColor.getRed(), ownerColor.getGreen(), ownerColor.getBlue(), (int) Math.round(95 + 70 * pulse)));
+                g.drawOval((int) Math.round(zone.x - radius), (int) Math.round(zone.y - radius), radius * 2, radius * 2);
+                g.setStroke(new BasicStroke(1.2f));
+                int inner = (int) Math.round(radius * (0.55 + 0.07 * pulse));
+                g.setColor(new Color(255, 255, 255, 72));
+                g.drawOval((int) Math.round(zone.x - inner), (int) Math.round(zone.y - inner), inner * 2, inner * 2);
+                drawSeraphHeartIcon(g, zone.x, zone.y, 52, 42, (int) Math.round(150 + 80 * lifeRatio));
+            }
+        }
+
+        private void drawHeartPickups(Graphics2D g) {
+            for (HeartPickup pickup : heartPickups) {
+                pickup.draw(g, seraphHeartImage);
+            }
+        }
+
+        private void drawSeraphHeartIcon(Graphics2D g, double x, double y, int maxWidth, int maxHeight, int alpha) {
+            if (seraphHeartImage == null) {
+                drawWingedHeartIcon(g, x, y, Math.min(maxWidth / 45.0, maxHeight / 28.0), alpha);
+                return;
+            }
+            double scale = Math.min(maxWidth / (double) seraphHeartImage.getWidth(), maxHeight / (double) seraphHeartImage.getHeight());
+            int drawWidth = Math.max(1, (int) Math.round(seraphHeartImage.getWidth() * scale));
+            int drawHeight = Math.max(1, (int) Math.round(seraphHeartImage.getHeight() * scale));
+            Graphics2D icon = (Graphics2D) g.create();
+            icon.setComposite(java.awt.AlphaComposite.getInstance(java.awt.AlphaComposite.SRC_OVER, Math.max(0, Math.min(255, alpha)) / 255f));
+            icon.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+            icon.drawImage(seraphHeartImage, (int) Math.round(x - drawWidth / 2.0), (int) Math.round(y - drawHeight / 2.0), drawWidth, drawHeight, null);
+            icon.dispose();
+        }
+
+        private static void drawWingedHeartIcon(Graphics2D g, double x, double y, double scale, int alpha) {
+            Graphics2D icon = (Graphics2D) g.create();
+            icon.translate(x, y);
+            icon.scale(scale, scale);
+            int safeAlpha = Math.max(0, Math.min(255, alpha));
+            icon.setStroke(new BasicStroke(2.2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            icon.setColor(new Color(255, 255, 255, Math.min(210, safeAlpha)));
+            icon.drawArc(-31, -9, 30, 20, 20, 135);
+            icon.drawArc(1, -9, 30, 20, 25, 135);
+            icon.drawLine(-13, -3, -25, 4);
+            icon.drawLine(13, -3, 25, 4);
+            icon.setColor(new Color(255, 94, 126, Math.min(230, safeAlpha)));
+            icon.fillOval(-11, -10, 13, 13);
+            icon.fillOval(-2, -10, 13, 13);
+            int[] heartX = {-11, 11, 0};
+            int[] heartY = {-3, -3, 13};
+            icon.fillPolygon(heartX, heartY, 3);
+            icon.setColor(new Color(255, 238, 244, Math.min(245, safeAlpha)));
+            icon.drawOval(-11, -10, 13, 13);
+            icon.drawOval(-2, -10, 13, 13);
+            icon.drawLine(-11, -2, 0, 13);
+            icon.drawLine(11, -2, 0, 13);
+            icon.dispose();
         }
 
         private void drawFloatingTexts(Graphics2D g) {
@@ -2626,20 +3699,44 @@ public class JetBattleGame {
         }
 
         private void drawFighterAvatar(Graphics2D g, Fighter fighter, Color mainColor) {
-            double targetX = fighter == blue ? mouseX : blue.x;
-            double targetY = fighter == blue ? mouseY : blue.y;
+            double targetX = titleDemoMode ? (fighter == blue ? red.x : blue.x) : (fighter == blue ? mouseX : blue.x);
+            double targetY = titleDemoMode ? (fighter == blue ? red.y : blue.y) : (fighter == blue ? mouseY : blue.y);
             double angle = Math.atan2(targetY - fighter.y, targetX - fighter.x);
             drawActiveArmorEffects(g, fighter);
             if (aircraftFor(fighter) == Aircraft.VENUS && fighter.venusGateRemaining > 0) {
                 drawVenusStarGate(g, fighter, angle);
             }
-            drawAircraftSprite(g, aircraftFor(fighter), fighter.x, fighter.y, angle, 82, 64,
+            drawVenusShards(g, fighter);
+            drawAircraftSprite(g, aircraftFor(fighter), fighter.x, fighter.y, angle, 98, 76,
                     fighter == blue ? "P" : "AI", fighter.boosting);
             if (aircraftFor(fighter) == Aircraft.VENUS && fighter.venusGateRemaining > 0) {
                 drawVenusArmorAssembly(g, fighter, angle);
             } else if (venusArmorActive(fighter)) {
                 drawVenusReinforcedArmor(g, fighter, angle);
             }
+        }
+
+        private void drawVenusShards(Graphics2D g, Fighter fighter) {
+            if (aircraftFor(fighter) != Aircraft.VENUS || fighter.venusShardCount <= 0) {
+                return;
+            }
+            long now = System.currentTimeMillis();
+            Graphics2D shard = (Graphics2D) g.create();
+            shard.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            for (int i = 0; i < fighter.venusShardCount; i++) {
+                double angle = now / 420.0 + i * Math.PI * 2.0 / VENUS_MAX_SHARDS;
+                int sx = (int) Math.round(fighter.x + Math.cos(angle) * 34);
+                int sy = (int) Math.round(fighter.y + Math.sin(angle) * 28);
+                int[] xs = {sx, sx + 6, sx, sx - 6};
+                int[] ys = {sy - 10, sy, sy + 10, sy};
+                shard.setColor(new Color(255, 195, 58, 90));
+                shard.fillOval(sx - 14, sy - 14, 28, 28);
+                shard.setColor(new Color(255, 219, 102, 230));
+                shard.fillPolygon(xs, ys, 4);
+                shard.setColor(Color.WHITE);
+                shard.drawPolygon(xs, ys, 4);
+            }
+            shard.dispose();
         }
 
         private void drawVenusStarGate(Graphics2D g, Fighter fighter, double angle) {
@@ -2666,51 +3763,134 @@ public class JetBattleGame {
             Graphics2D armor = (Graphics2D) g.create();
             armor.translate(fighter.x, fighter.y);
             armor.rotate(angle);
-            armor.setColor(new Color(255, 203, 65, 220));
-            int[] upperPlateX = {-18, -3, 13, 6, -13};
-            int[] upperPlateY = {-10, -20, -17, -11, -7};
-            int[] lowerPlateX = {-18, -3, 13, 6, -13};
-            int[] lowerPlateY = {10, 20, 17, 11, 7};
-            armor.fillPolygon(upperPlateX, upperPlateY, upperPlateX.length);
-            armor.fillPolygon(lowerPlateX, lowerPlateY, lowerPlateX.length);
-            armor.setColor(new Color(255, 235, 151));
-            armor.setStroke(new BasicStroke(2.2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-            armor.drawRoundRect(-18, -9, 39, 18, 9, 9);
-            armor.drawLine(-2, -24, 17, -24);
-            armor.drawLine(-2, 24, 17, 24);
-            armor.setColor(new Color(255, 176, 38));
-            armor.fillRoundRect(8, -28, 18, 7, 5, 5);
-            armor.fillRoundRect(8, 21, 18, 7, 5, 5);
-            armor.setColor(Color.WHITE);
-            armor.fillOval(18, -27, 7, 5);
-            armor.fillOval(18, 22, 7, 5);
+            armor.setColor(new Color(255, 199, 57, 54));
+            armor.fillOval(-42, -38, 84, 76);
+            drawVenusArmorPiece(armor, 5, -25, 0, 1.0, 235);
+            drawVenusArmorPiece(armor, 1, -9, -18, 1.0, 238);
+            drawVenusArmorPiece(armor, 2, -9, 18, 1.0, 238);
+            drawVenusArmorPiece(armor, 0, 1, 0, 1.0, 245);
+            drawVenusArmorPiece(armor, 3, 4, -25, 1.0, 245);
+            drawVenusArmorPiece(armor, 4, 4, 25, 1.0, 245);
+            drawVenusArmorPiece(armor, 6, 22, 0, 1.0, 220);
             armor.dispose();
         }
 
         private void drawVenusArmorAssembly(Graphics2D g, Fighter fighter, double angle) {
             double progress = 1.0 - fighter.venusGateRemaining / VENUS_GATE_DURATION;
-            double eased = progress * progress * (3.0 - 2.0 * progress);
             Graphics2D armor = (Graphics2D) g.create();
             armor.translate(fighter.x, fighter.y);
             armor.rotate(angle);
-            double[][] targets = {
-                    {-5, -18}, {-5, 18}, {10, -25}, {10, 25}, {-8, 0}
+            double[][] pieces = {
+                    {5, -25, 0, 0.00},
+                    {1, -9, -18, 0.10},
+                    {2, -9, 18, 0.10},
+                    {0, 1, 0, 0.22},
+                    {3, 4, -25, 0.38},
+                    {4, 4, 25, 0.38},
+                    {6, 22, 0, 0.55}
             };
-            double[][] starts = {
-                    {-58, -22}, {-58, 22}, {-66, -9}, {-66, 9}, {-52, 0}
-            };
-            armor.setColor(new Color(255, 211, 78, 210));
-            armor.setStroke(new BasicStroke(2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-            for (int i = 0; i < targets.length; i++) {
-                double px = starts[i][0] + (targets[i][0] - starts[i][0]) * eased;
-                double py = starts[i][1] + (targets[i][1] - starts[i][1]) * eased;
-                int size = i == 4 ? 15 : 11;
-                armor.fillRoundRect((int) Math.round(px - size / 2.0), (int) Math.round(py - 4), size, 8, 5, 5);
-                armor.setColor(new Color(255, 246, 192, 225));
-                armor.drawLine((int) Math.round(px - 3), (int) Math.round(py), (int) Math.round(px + 4), (int) Math.round(py));
-                armor.setColor(new Color(255, 211, 78, 210));
+            for (double[] piece : pieces) {
+                int type = (int) piece[0];
+                double targetX = piece[1];
+                double targetY = piece[2];
+                double local = clamp((progress - piece[3]) / 0.45, 0, 1);
+                double eased = local * local * (3.0 - 2.0 * local);
+                double startX = -82 - type * 3.0;
+                double startY = targetY * 1.22;
+                double px = startX + (targetX - startX) * eased;
+                double py = startY + (targetY - startY) * eased;
+                int alpha = (int) Math.round(80 + 165 * local);
+                armor.setColor(new Color(255, 210, 74, Math.max(0, Math.min(160, alpha - 40))));
+                armor.setStroke(new BasicStroke(1.6f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                armor.drawLine((int) Math.round(startX), (int) Math.round(startY), (int) Math.round(px), (int) Math.round(py));
+                drawVenusArmorPiece(armor, type, px, py, 0.65 + 0.35 * local, alpha);
             }
             armor.dispose();
+        }
+
+        private void drawVenusArmorPiece(Graphics2D g, int type, double x, double y, double scale, int alpha) {
+            Graphics2D piece = (Graphics2D) g.create();
+            piece.translate(x, y);
+            piece.scale(scale, scale);
+            Color white = new Color(246, 239, 218, alpha);
+            Color gold = new Color(255, 188, 45, Math.min(255, alpha + 8));
+            Color dark = new Color(22, 24, 26, Math.min(230, alpha));
+            Color glow = new Color(255, 144, 24, Math.min(220, alpha));
+            Color outline = new Color(255, 246, 202, Math.min(255, alpha));
+            piece.setStroke(new BasicStroke(1.7f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            switch (type) {
+                case 0 -> {
+                    piece.setColor(dark);
+                    piece.fillRoundRect(-17, -9, 42, 18, 9, 9);
+                    piece.setColor(white);
+                    piece.fillRoundRect(-13, -7, 34, 14, 8, 8);
+                    piece.setColor(gold);
+                    piece.fillRoundRect(-5, -5, 19, 10, 6, 6);
+                    piece.setColor(glow);
+                    piece.drawLine(1, 0, 18, 0);
+                    piece.setColor(outline);
+                    piece.drawRoundRect(-17, -9, 42, 18, 9, 9);
+                }
+                case 1, 2 -> {
+                    int mirror = type == 1 ? -1 : 1;
+                    int[] outerX = {-18, -5, 23, 15, -8};
+                    int[] outerY = {2 * mirror, -18 * mirror, -14 * mirror, -4 * mirror, 7 * mirror};
+                    piece.setColor(dark);
+                    piece.fillPolygon(outerX, outerY, outerX.length);
+                    int[] plateX = {-13, -2, 16, 10, -5};
+                    int[] plateY = {1 * mirror, -13 * mirror, -10 * mirror, -3 * mirror, 5 * mirror};
+                    piece.setColor(white);
+                    piece.fillPolygon(plateX, plateY, plateX.length);
+                    int[] goldX = {-6, 2, 12, 7, -2};
+                    int[] goldY = {0, -9 * mirror, -7 * mirror, -2 * mirror, 3 * mirror};
+                    piece.setColor(gold);
+                    piece.fillPolygon(goldX, goldY, goldX.length);
+                    piece.setColor(outline);
+                    piece.drawPolygon(outerX, outerY, outerX.length);
+                }
+                case 3, 4 -> {
+                    piece.setColor(dark);
+                    piece.fillRoundRect(-13, -5, 31, 10, 6, 6);
+                    piece.setColor(white);
+                    piece.fillRoundRect(-8, -4, 20, 8, 5, 5);
+                    piece.setColor(gold);
+                    piece.fillRoundRect(8, -3, 17, 6, 4, 4);
+                    piece.setColor(glow);
+                    piece.fillOval(24, -4, 8, 8);
+                    piece.setColor(outline);
+                    piece.drawRoundRect(-13, -5, 31, 10, 6, 6);
+                }
+                case 5 -> {
+                    int[] outerX = {-16, -5, 12, 11, -4};
+                    int[] outerY = {0, -12, -7, 7, 12};
+                    piece.setColor(dark);
+                    piece.fillPolygon(outerX, outerY, outerX.length);
+                    int[] plateX = {-10, -2, 7, 7, -2};
+                    int[] plateY = {0, -8, -4, 4, 8};
+                    piece.setColor(white);
+                    piece.fillPolygon(plateX, plateY, plateX.length);
+                    piece.setColor(glow);
+                    piece.drawLine(-1, -6, 7, 0);
+                    piece.drawLine(-1, 6, 7, 0);
+                    piece.setColor(outline);
+                    piece.drawPolygon(outerX, outerY, outerX.length);
+                }
+                case 6 -> {
+                    int[] outerX = {-9, 15, 27, 12, -6};
+                    int[] outerY = {-8, -5, 0, 5, 8};
+                    piece.setColor(white);
+                    piece.fillPolygon(outerX, outerY, outerX.length);
+                    piece.setColor(gold);
+                    int[] innerX = {1, 16, 22, 13, 2};
+                    int[] innerY = {-4, -3, 0, 3, 4};
+                    piece.fillPolygon(innerX, innerY, innerX.length);
+                    piece.setColor(outline);
+                    piece.drawPolygon(outerX, outerY, outerX.length);
+                }
+                default -> {
+                }
+            }
+            piece.dispose();
         }
 
         private void drawActiveArmorEffects(Graphics2D g, Fighter fighter) {
@@ -2746,30 +3926,31 @@ public class JetBattleGame {
                                         int maxWidth, int maxHeight, String label, boolean boosting) {
             BufferedImage image = aircraftSprites.get(aircraft);
             if (image == null) {
+                if (aircraft == Aircraft.SIX_WINGED_ANGEL) {
+                    drawSixWingedAngelJet(g, x, y, angle, label, boosting);
+                    return;
+                }
                 drawFutureJet(g, x, y, angle, aircraft.color, label, boosting);
                 return;
             }
 
-            double scale = Math.min(maxWidth / (double) image.getWidth(), maxHeight / (double) image.getHeight());
+            boolean noseUpSource = aircraft == Aircraft.SIX_WINGED_ANGEL;
+            double scale = noseUpSource
+                    ? Math.min(maxWidth / (double) image.getHeight(), maxHeight / (double) image.getWidth())
+                    : Math.min(maxWidth / (double) image.getWidth(), maxHeight / (double) image.getHeight());
             int drawWidth = Math.max(1, (int) Math.round(image.getWidth() * scale));
             int drawHeight = Math.max(1, (int) Math.round(image.getHeight() * scale));
             Graphics2D jet = (Graphics2D) g.create();
             jet.translate(x, y);
-            jet.rotate(angle);
+            jet.rotate(noseUpSource ? angle + Math.PI / 2.0 : angle);
             jet.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
 
             if (boosting) {
-                int rearX = -drawWidth / 2 + Math.max(2, drawWidth / 18);
-                int flameLength = Math.max(22, drawWidth / 3);
-                int flameHalfHeight = Math.max(5, drawHeight / 9);
-                int[] flameX = {rearX, rearX - flameLength, rearX};
-                int[] flameY = {-flameHalfHeight, 0, flameHalfHeight};
-                jet.setColor(new Color(62, 176, 255, 155));
-                jet.fillPolygon(flameX, flameY, 3);
-                int[] coreX = {rearX, rearX - flameLength * 2 / 3, rearX};
-                int[] coreY = {-Math.max(2, flameHalfHeight / 2), 0, Math.max(2, flameHalfHeight / 2)};
-                jet.setColor(new Color(255, 244, 196, 220));
-                jet.fillPolygon(coreX, coreY, 3);
+                if (noseUpSource) {
+                    drawSeraphImageBoostFlames(jet, drawWidth, drawHeight);
+                } else {
+                    drawAircraftBoostFlames(jet, aircraft, drawWidth, drawHeight);
+                }
             }
 
             jet.drawImage(image, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight, null);
@@ -2782,6 +3963,136 @@ public class JetBattleGame {
                 g.drawString(label, (int) (x - metrics.stringWidth(label) / 2.0),
                         (int) y + maxHeight / 2 + 14);
             }
+        }
+
+        private void drawAircraftBoostFlames(Graphics2D jet, Aircraft aircraft, int drawWidth, int drawHeight) {
+            int rearX = -drawWidth / 2 + Math.max(3, drawWidth / 16);
+            switch (aircraft) {
+                case TAIL_FLAME -> {
+                    drawThrusterFlame(jet, rearX, 0, drawWidth / 2.4, drawHeight / 4.4,
+                            new Color(255, 105, 34, 150), new Color(255, 244, 196, 235));
+                    drawThrusterFlame(jet, rearX + drawWidth / 12, -drawHeight * 0.22, drawWidth / 3.6, drawHeight / 9.5,
+                            new Color(255, 169, 74, 115), new Color(255, 244, 210, 190));
+                    drawThrusterFlame(jet, rearX + drawWidth / 12, drawHeight * 0.22, drawWidth / 3.6, drawHeight / 9.5,
+                            new Color(255, 169, 74, 115), new Color(255, 244, 210, 190));
+                }
+                case BLUE_GLOW -> {
+                    drawThrusterFlame(jet, rearX + drawWidth / 12, -drawHeight * 0.19, drawWidth / 3.8, drawHeight / 10.5,
+                            new Color(62, 176, 255, 145), new Color(225, 250, 255, 225));
+                    drawThrusterFlame(jet, rearX + drawWidth / 12, drawHeight * 0.19, drawWidth / 3.8, drawHeight / 10.5,
+                            new Color(62, 176, 255, 145), new Color(225, 250, 255, 225));
+                }
+                case NEUTRON_STAR -> {
+                    drawThrusterFlame(jet, rearX + drawWidth / 18, 0, drawWidth / 3.2, drawHeight / 8.8,
+                            new Color(166, 94, 255, 128), new Color(244, 226, 255, 210));
+                    jet.setColor(new Color(196, 150, 255, 95));
+                    int ringR = Math.max(8, drawHeight / 8);
+                    jet.drawOval(rearX - ringR, -ringR, ringR * 2, ringR * 2);
+                }
+                case VENUS -> {
+                    drawThrusterFlame(jet, rearX + drawWidth / 10, -drawHeight * 0.16, drawWidth / 3.6, drawHeight / 11.0,
+                            new Color(255, 190, 58, 138), new Color(255, 249, 203, 220));
+                    drawThrusterFlame(jet, rearX + drawWidth / 10, drawHeight * 0.16, drawWidth / 3.6, drawHeight / 11.0,
+                            new Color(255, 190, 58, 138), new Color(255, 249, 203, 220));
+                    drawThrusterFlame(jet, rearX, 0, drawWidth / 4.4, drawHeight / 12.0,
+                            new Color(255, 142, 38, 110), new Color(255, 244, 196, 185));
+                }
+                case SIX_WINGED_ANGEL -> {
+                    drawThrusterFlame(jet, rearX + drawWidth / 9, -drawHeight * 0.18, drawWidth / 4.0, drawHeight / 12.0,
+                            new Color(255, 136, 164, 112), new Color(255, 255, 255, 220));
+                    drawThrusterFlame(jet, rearX + drawWidth / 9, drawHeight * 0.18, drawWidth / 4.0, drawHeight / 12.0,
+                            new Color(255, 136, 164, 112), new Color(255, 255, 255, 220));
+                    drawThrusterFlame(jet, rearX, 0, drawWidth / 4.8, drawHeight / 14.0,
+                            new Color(255, 214, 224, 92), new Color(255, 255, 255, 185));
+                }
+            }
+        }
+
+        private void drawSeraphImageBoostFlames(Graphics2D jet, int drawWidth, int drawHeight) {
+            double rearY = drawHeight / 2.0 - Math.max(4, drawHeight / 18.0);
+            drawVerticalThrusterFlame(jet, -drawWidth * 0.12, rearY, drawHeight / 3.2, drawWidth / 28.0,
+                    new Color(255, 136, 190, 118), new Color(255, 255, 255, 215));
+            drawVerticalThrusterFlame(jet, drawWidth * 0.12, rearY, drawHeight / 3.2, drawWidth / 28.0,
+                    new Color(255, 136, 190, 118), new Color(255, 255, 255, 215));
+            drawVerticalThrusterFlame(jet, 0, rearY + drawHeight * 0.02, drawHeight / 2.8, drawWidth / 24.0,
+                    new Color(255, 172, 210, 98), new Color(255, 255, 255, 185));
+        }
+
+        private void drawVerticalThrusterFlame(Graphics2D jet, double x, double y, double length, double halfWidth, Color outer, Color core) {
+            int[] flameX = {(int) Math.round(x - halfWidth), (int) Math.round(x), (int) Math.round(x + halfWidth)};
+            int[] flameY = {(int) Math.round(y), (int) Math.round(y + length), (int) Math.round(y)};
+            jet.setColor(outer);
+            jet.fillPolygon(flameX, flameY, 3);
+            int coreHalfWidth = Math.max(2, (int) Math.round(halfWidth * 0.45));
+            int[] coreX = {(int) Math.round(x - coreHalfWidth), (int) Math.round(x), (int) Math.round(x + coreHalfWidth)};
+            int[] coreY = {(int) Math.round(y), (int) Math.round(y + length * 0.62), (int) Math.round(y)};
+            jet.setColor(core);
+            jet.fillPolygon(coreX, coreY, 3);
+        }
+
+        private void drawThrusterFlame(Graphics2D jet, double x, double y, double length, double halfHeight, Color outer, Color core) {
+            int[] flameX = {(int) Math.round(x), (int) Math.round(x - length), (int) Math.round(x)};
+            int[] flameY = {(int) Math.round(y - halfHeight), (int) Math.round(y), (int) Math.round(y + halfHeight)};
+            jet.setColor(outer);
+            jet.fillPolygon(flameX, flameY, 3);
+            int[] coreX = {(int) Math.round(x), (int) Math.round(x - length * 0.62), (int) Math.round(x)};
+            int coreHalfHeight = Math.max(2, (int) Math.round(halfHeight * 0.42));
+            int[] coreY = {(int) Math.round(y - coreHalfHeight), (int) Math.round(y), (int) Math.round(y + coreHalfHeight)};
+            jet.setColor(core);
+            jet.fillPolygon(coreX, coreY, 3);
+        }
+
+        private void drawSixWingedAngelJet(Graphics2D g, double x, double y, double angle, String label, boolean boosting) {
+            Graphics2D jet = (Graphics2D) g.create();
+            jet.translate(x, y);
+            jet.rotate(angle);
+            if (boosting) {
+                drawThrusterFlame(jet, -30, -13, 28, 5, new Color(255, 137, 165, 120), new Color(255, 255, 255, 215));
+                drawThrusterFlame(jet, -30, 13, 28, 5, new Color(255, 137, 165, 120), new Color(255, 255, 255, 215));
+                drawThrusterFlame(jet, -34, 0, 22, 4, new Color(255, 218, 228, 90), new Color(255, 255, 255, 180));
+            }
+
+            jet.setColor(new Color(255, 255, 255, 44));
+            jet.fillOval(-43, -36, 86, 72);
+            drawAngelWing(jet, -3, -8, -1);
+            drawAngelWing(jet, -3, 8, 1);
+            drawAngelWing(jet, -17, -16, -1);
+            drawAngelWing(jet, -17, 16, 1);
+            drawAngelWing(jet, -30, -22, -1);
+            drawAngelWing(jet, -30, 22, 1);
+
+            int[] hullX = {32, 13, -15, -35, -18, -35, -15, 13};
+            int[] hullY = {0, -8, -10, -5, 0, 5, 10, 8};
+            jet.setColor(new Color(246, 250, 255, 235));
+            jet.fillPolygon(hullX, hullY, hullX.length);
+            jet.setColor(new Color(255, 104, 130, 218));
+            jet.fillRoundRect(-4, -4, 14, 8, 6, 6);
+            jet.fillOval(13, -3, 8, 6);
+            jet.setColor(new Color(145, 38, 58, 180));
+            jet.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            jet.drawLine(-16, 0, 24, 0);
+            jet.setColor(new Color(255, 255, 255, 230));
+            jet.drawPolygon(hullX, hullY, hullX.length);
+            jet.dispose();
+
+            if (!label.isEmpty()) {
+                g.setFont(new Font("SansSerif", Font.BOLD, 12));
+                g.setColor(Color.WHITE);
+                FontMetrics metrics = g.getFontMetrics();
+                g.drawString(label, (int) (x - metrics.stringWidth(label) / 2.0), (int) y + 28);
+            }
+        }
+
+        private void drawAngelWing(Graphics2D jet, int x, int y, int side) {
+            int[] wingX = {x + 21, x - 3, x - 25, x - 7};
+            int[] wingY = {y, y + side * 14, y + side * 26, y + side * 5};
+            jet.setColor(new Color(247, 252, 255, 178));
+            jet.fillPolygon(wingX, wingY, wingX.length);
+            jet.setColor(new Color(255, 119, 145, 135));
+            jet.setStroke(new BasicStroke(1.2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            jet.drawLine(x + 2, y + side * 9, x - 17, y + side * 21);
+            jet.setColor(new Color(255, 255, 255, 218));
+            jet.drawPolygon(wingX, wingY, wingX.length);
         }
 
         private void drawFutureJet(Graphics2D g, double x, double y, double angle, Color mainColor, String label, boolean boosting) {
@@ -2842,67 +4153,73 @@ public class JetBattleGame {
         }
 
         private void drawFighter(Graphics2D g, Fighter fighter, int x, int y, Color mainColor) {
-            g.setColor(new Color(28, 32, 40));
-            g.fillRoundRect(x, y, 270, 184, 12, 12);
-            g.setColor(mainColor);
-            g.setStroke(new BasicStroke(3));
-            g.drawRoundRect(x, y, 270, 184, 12, 12);
+            int panelW = 238;
+            g.setColor(new Color(8, 12, 18, 150));
+            g.fillRoundRect(x, y, panelW, 104, 10, 10);
 
-            g.setFont(new Font("SansSerif", Font.BOLD, 22));
+            g.setFont(new Font("SansSerif", Font.BOLD, 16));
             g.setColor(Color.WHITE);
-            g.drawString(fighterDisplayName(fighter), x + 18, y + 34);
-
-            g.setFont(new Font("SansSerif", Font.BOLD, 18));
+            drawClippedString(g, fighterDisplayName(fighter), x + 12, y + 24, 132);
+            g.setFont(new Font("SansSerif", Font.BOLD, 14));
             g.setColor(mainColor);
-            g.drawString(fighter == blue ? text("玩家", "Player") : text("人机", "AI"), x + 18, y + 60);
+            String controller = titleDemoMode ? "AI" : fighter == blue ? text("玩家", "Player") : text("人机", "AI");
+            drawClippedString(g, controller, x + 152, y + 24, 72);
 
-            drawBar(g, "HP", fighter.hp, fighter.maxHp, x + 18, y + 82, 234, new Color(71, 196, 117));
-            drawBar(g, "Skill", fighter.charge, MAX_CHARGE, x + 18, y + 118, 108, new Color(244, 196, 77));
+            drawBar(g, "HP", fighter.hp, fighter.maxHp, x + 12, y + 43, 214, new Color(71, 196, 117));
+            drawBar(g, "Skill", fighter.charge, MAX_CHARGE, x + 12, y + 74, 98, new Color(244, 196, 77));
             drawBar(g, "Boost", (int) Math.round(fighter.boostEnergy * 10), (int) Math.round(BOOST_MAX_ENERGY * 10),
-                    x + 144, y + 118, 108, new Color(86, 202, 255));
+                    x + 128, y + 74, 98, new Color(86, 202, 255));
 
-            g.setFont(new Font("SansSerif", Font.PLAIN, 14));
+            g.setFont(new Font("SansSerif", Font.PLAIN, 11));
             g.setColor(new Color(223, 228, 237));
-            g.drawString("ATK " + effectiveAttack(fighter), x + 18, y + 154);
-            g.drawString("DEF " + effectiveDefense(fighter), x + 86, y + 154);
-            g.drawString("SPD " + effectiveSpeed(fighter), x + 154, y + 154);
-            g.drawString("SKL " + fighter.skillBonus, x + 210, y + 154);
+            g.drawString("ATK " + effectiveAttack(fighter), x + 12, y + 100);
+            g.drawString("DEF " + effectiveDefense(fighter), x + 70, y + 100);
+            g.drawString("SPD " + effectiveSpeed(fighter), x + 128, y + 100);
+            g.drawString("SKL " + fighter.skillBonus, x + 184, y + 100);
             if (fighter == blue && playerAircraft == Aircraft.BLUE_GLOW) {
-                g.setFont(new Font("SansSerif", Font.PLAIN, 12));
+                g.setFont(new Font("SansSerif", Font.PLAIN, 10));
                 g.setColor(new Color(190, 207, 226));
-                g.drawString("Mode " + (blueBurstMode ? "Burst" : "Single") + " (C)", x + 18, y + 176);
+                g.drawString("Mode " + (blueBurstMode ? "Burst" : "Single") + " (C)", x + 128, y + 55);
             } else if (aircraftFor(fighter) == Aircraft.VENUS && fighter.venusGateRemaining > 0) {
-                g.setFont(new Font("SansSerif", Font.PLAIN, 12));
+                g.setFont(new Font("SansSerif", Font.PLAIN, 10));
                 g.setColor(new Color(255, 214, 96));
-                g.drawString(String.format("Assembling %.1fs", fighter.venusGateRemaining), x + 18, y + 176);
+                g.drawString(String.format("Assembling %.1fs", fighter.venusGateRemaining), x + 128, y + 55);
             } else if (venusArmorActive(fighter)) {
-                g.setFont(new Font("SansSerif", Font.PLAIN, 12));
+                g.setFont(new Font("SansSerif", Font.PLAIN, 10));
                 g.setColor(new Color(255, 214, 96));
-                g.drawString(String.format("Armor %d  %.1fs", fighter.venusArmorHp, fighter.venusArmorRemaining), x + 18, y + 176);
+                g.drawString(String.format("Armor %d  %.1fs", fighter.venusArmorHp, fighter.venusArmorRemaining), x + 128, y + 55);
+            } else if (fighter.seraphSpeedBuffRemaining > 0) {
+                g.setFont(new Font("SansSerif", Font.PLAIN, 10));
+                g.setColor(new Color(255, 232, 240));
+                g.drawString("Seraph field +SPD", x + 128, y + 55);
+            } else if (fighter.seraphSpeedDebuffRemaining > 0 || fighter.seraphDefenseDebuffRemaining > 0) {
+                g.setFont(new Font("SansSerif", Font.PLAIN, 10));
+                g.setColor(new Color(255, 154, 174));
+                g.drawString("Seraph field -DEF/SPD", x + 128, y + 55);
             }
         }
 
         private void drawBar(Graphics2D g, String label, int value, int maxValue, int x, int y, int width, Color color) {
-            int height = 22;
+            int height = 12;
             double ratio = maxValue == 0 ? 0 : (double) value / maxValue;
             int filledWidth = (int) Math.round(width * ratio);
 
-            g.setFont(new Font("SansSerif", Font.BOLD, 14));
+            g.setFont(new Font("SansSerif", Font.BOLD, 10));
             g.setColor(new Color(210, 216, 226));
-            g.drawString(label + ": " + value + "/" + maxValue, x, y - 8);
+            g.drawString(label + " " + value + "/" + maxValue, x, y - 4);
 
-            g.setColor(new Color(47, 53, 64));
-            g.fillRoundRect(x, y, width, height, 8, 8);
+            g.setColor(new Color(17, 23, 32, 175));
+            g.fillRoundRect(x, y, width, height, 5, 5);
             g.setColor(color);
-            g.fillRoundRect(x, y, filledWidth, height, 8, 8);
+            g.fillRoundRect(x, y, filledWidth, height, 5, 5);
         }
 
         private void drawMessage(Graphics2D g) {
-            g.setColor(new Color(28, 32, 40));
-            g.fillRoundRect(90, 644, 780, 48, 10, 10);
-            g.setFont(new Font("SansSerif", Font.BOLD, 17));
+            g.setColor(new Color(8, 12, 18, 135));
+            g.fillRoundRect(300, 676, 360, 28, 8, 8);
+            g.setFont(new Font("SansSerif", Font.BOLD, 13));
             g.setColor(new Color(238, 240, 245));
-            drawCenteredText(g, message, 675);
+            drawCenteredTextInBox(g, message, 300, 360, 695);
         }
 
         private void drawPausedOverlay(Graphics2D g) {
@@ -3064,6 +4381,13 @@ public class JetBattleGame {
                     fireVenusShot(blue, red, targetX, targetY, true);
                     nextPlayerNormalAttackTime = now + (enhanced ? VENUS_ENHANCED_ATTACK_COOLDOWN : VENUS_ATTACK_COOLDOWN);
                 }
+            } else if (playerAircraft == Aircraft.SIX_WINGED_ANGEL) {
+                leftMouseDown = false;
+                long now = System.currentTimeMillis();
+                if (now >= nextPlayerNormalAttackTime) {
+                    fireSeraphShot(blue, red, targetX, targetY, true);
+                    nextPlayerNormalAttackTime = now + NORMAL_ATTACK_COOLDOWN;
+                }
             } else {
                 leftMouseDown = false;
                 long now = System.currentTimeMillis();
@@ -3094,10 +4418,28 @@ public class JetBattleGame {
             return input < 0 && input == mouseInputCode(event);
         }
 
+        private void leaveTitleScreen() {
+            clearTitleDemoBattle();
+            titleScreen = false;
+            choosingDifficulty = true;
+            showingHangar = false;
+            showingMapSelection = false;
+            settingsOpen = false;
+            aircraftMenuOpen = true;
+            difficultyMenuOpen = false;
+            selectedMenuSection = 0;
+            playUiSound();
+            repaint();
+        }
+
         private final class BattleMouseListener extends MouseAdapter {
             @Override
             public void mousePressed(MouseEvent event) {
                 requestFocusInWindow();
+                if (titleScreen) {
+                    leaveTitleScreen();
+                    return;
+                }
                 if (settingsOpen && rebindingControlIndex >= 0) {
                     int input = mouseInputCode(event);
                     if (input != 0) {
@@ -3228,6 +4570,11 @@ public class JetBattleGame {
                 return;
             }
 
+            if (showingMapSelection) {
+                handleMapSelectionClick(x, y);
+                return;
+            }
+
             if (x >= SETUP_PANEL_X && x <= SETUP_PANEL_X + SETUP_PANEL_WIDTH && y >= 132 && y <= 186) {
                 selectedMenuSection = 0;
                 aircraftMenuOpen = !aircraftMenuOpen;
@@ -3236,11 +4583,22 @@ public class JetBattleGame {
                 return;
             }
 
-            int difficultyHeaderY = aircraftMenuOpen ? 314 : 198;
+            int difficultyHeaderY = 132 + 66 + (aircraftMenuOpen ? 136 : 0);
             if (x >= SETUP_PANEL_X && x <= SETUP_PANEL_X + SETUP_PANEL_WIDTH && y >= difficultyHeaderY && y <= difficultyHeaderY + 54) {
                 selectedMenuSection = 1;
                 difficultyMenuOpen = !difficultyMenuOpen;
                 aircraftMenuOpen = false;
+                repaint();
+                return;
+            }
+
+            int mapHeaderY = difficultyHeaderY + 66 + (difficultyMenuOpen ? 156 : 0);
+            if (x >= SETUP_PANEL_X && x <= SETUP_PANEL_X + SETUP_PANEL_WIDTH && y >= mapHeaderY && y <= mapHeaderY + 54) {
+                selectedMenuSection = 2;
+                aircraftMenuOpen = false;
+                difficultyMenuOpen = false;
+                showingMapSelection = true;
+                previewMapIndex = selectedMapIndex;
                 repaint();
                 return;
             }
@@ -3276,7 +4634,7 @@ public class JetBattleGame {
                 }
             }
 
-            int difficultyCardsY = aircraftMenuOpen ? 380 : 264;
+            int difficultyCardsY = difficultyHeaderY + 66;
             if (difficultyMenuOpen && y >= difficultyCardsY && y <= difficultyCardsY + 130) {
                 Difficulty[] difficulties = Difficulty.values();
                 int cardW = 160;
@@ -3300,9 +4658,41 @@ public class JetBattleGame {
 
             if (x >= HANGAR_BUTTON_X && x <= HANGAR_BUTTON_X + HANGAR_BUTTON_WIDTH && y >= 646 && y <= 676) {
                 showingHangar = true;
+                showingMapSelection = false;
                 hangarAircraftIndex = selectedAircraftIndex >= 0 ? selectedAircraftIndex : 0;
                 ensureHangarAircraftVisible();
                 repaint();
+                return;
+            }
+
+        }
+
+        private void handleMapSelectionClick(int x, int y) {
+            if (x >= 282 && x <= 462 && y >= 604 && y <= 638) {
+                showingMapSelection = false;
+                repaint();
+                return;
+            }
+            if (x >= 502 && x <= 682 && y >= 604 && y <= 638) {
+                selectedMapIndex = previewMapIndex;
+                showingMapSelection = false;
+                playUiSound();
+                repaint();
+                return;
+            }
+
+            BattleMap[] maps = BattleMap.values();
+            int listX = 62;
+            int listY = 116;
+            int listW = 250;
+            int rowH = 70;
+            for (int i = 0; i < maps.length; i++) {
+                int rowY = listY + i * (rowH + 10);
+                if (x >= listX && x <= listX + listW && y >= rowY && y <= rowY + rowH) {
+                    previewMapIndex = i;
+                    repaint();
+                    return;
+                }
             }
         }
 
@@ -3336,7 +4726,7 @@ public class JetBattleGame {
         }
 
         private void ensureHangarAircraftVisible() {
-            int visibleCount = Math.min(3, Aircraft.values().length);
+            int visibleCount = hangarVisibleCount();
             if (hangarAircraftIndex < hangarScrollIndex) {
                 hangarScrollIndex = hangarAircraftIndex;
             } else if (hangarAircraftIndex >= hangarScrollIndex + visibleCount) {
@@ -3387,9 +4777,9 @@ public class JetBattleGame {
             int listY = 116;
             int listW = 250;
             int rowH = 72;
-            int visibleCount = Math.min(3, aircraft.length);
+            int visibleCount = hangarVisibleCount();
             int arrowY = listY + visibleCount * (rowH + 12) + 2;
-            if (y >= arrowY && y <= arrowY + 24) {
+            if (aircraft.length > visibleCount && y >= arrowY && y <= arrowY + 24) {
                 if (x >= listX + listW - 60 && x <= listX + listW - 36) {
                     hangarScrollIndex = clampScrollIndex(hangarScrollIndex - 1, aircraft.length, visibleCount);
                 } else if (x >= listX + listW - 32 && x <= listX + listW - 8) {
@@ -3434,9 +4824,12 @@ public class JetBattleGame {
                     return;
                 }
                 int direction = Integer.signum(event.getWheelRotation());
-                if (showingHangar) {
+                if (showingMapSelection) {
+                    BattleMap[] maps = BattleMap.values();
+                    previewMapIndex = (previewMapIndex + direction + maps.length) % maps.length;
+                } else if (showingHangar) {
                     hangarScrollIndex = clampScrollIndex(hangarScrollIndex + direction,
-                            Aircraft.values().length, Math.min(3, Aircraft.values().length));
+                            Aircraft.values().length, hangarVisibleCount());
                 } else if (aircraftMenuOpen) {
                     aircraftScrollIndex = clampScrollIndex(aircraftScrollIndex + direction,
                             Aircraft.values().length, Math.min(3, Aircraft.values().length));
@@ -3460,6 +4853,11 @@ public class JetBattleGame {
                     return;
                 }
 
+                if (titleScreen) {
+                    leaveTitleScreen();
+                    return;
+                }
+
                 if (settingsOpen) {
                     if (rebindingControlIndex >= 0) {
                         if (key != KeyEvent.VK_ESCAPE) {
@@ -3477,6 +4875,22 @@ public class JetBattleGame {
                 if (choosingDifficulty) {
                     Difficulty[] difficulties = Difficulty.values();
                     Aircraft[] aircraft = Aircraft.values();
+                    if (showingMapSelection) {
+                        BattleMap[] maps = BattleMap.values();
+                        if (key == KeyEvent.VK_ESCAPE) {
+                            showingMapSelection = false;
+                        } else if (key == KeyEvent.VK_ENTER || key == KeyEvent.VK_SPACE) {
+                            selectedMapIndex = previewMapIndex;
+                            showingMapSelection = false;
+                            playUiSound();
+                        } else if (key == KeyEvent.VK_UP || key == KeyEvent.VK_W || key == KeyEvent.VK_LEFT || key == KeyEvent.VK_A) {
+                            previewMapIndex = (previewMapIndex - 1 + maps.length) % maps.length;
+                        } else if (key == KeyEvent.VK_DOWN || key == KeyEvent.VK_S || key == KeyEvent.VK_RIGHT || key == KeyEvent.VK_D) {
+                            previewMapIndex = (previewMapIndex + 1) % maps.length;
+                        }
+                        repaint();
+                        return;
+                    }
                     if (showingHangar) {
                         if (key == KeyEvent.VK_ESCAPE || key == KeyEvent.VK_ENTER) {
                             showingHangar = false;
@@ -3491,12 +4905,12 @@ public class JetBattleGame {
                         return;
                     }
                     if (key == KeyEvent.VK_UP || key == KeyEvent.VK_W) {
-                        selectedMenuSection = (selectedMenuSection + 1) % 2;
+                        selectedMenuSection = (selectedMenuSection + 2) % 3;
                         aircraftMenuOpen = selectedMenuSection == 0;
                         difficultyMenuOpen = selectedMenuSection == 1;
                         repaint();
                     } else if (key == KeyEvent.VK_DOWN || key == KeyEvent.VK_S) {
-                        selectedMenuSection = (selectedMenuSection + 1) % 2;
+                        selectedMenuSection = (selectedMenuSection + 1) % 3;
                         aircraftMenuOpen = selectedMenuSection == 0;
                         difficultyMenuOpen = selectedMenuSection == 1;
                         repaint();
@@ -3504,32 +4918,40 @@ public class JetBattleGame {
                         if (selectedMenuSection == 0) {
                             selectedAircraftIndex = selectedAircraftIndex < 0 ? 0 : (selectedAircraftIndex - 1 + aircraft.length) % aircraft.length;
                             ensureAircraftVisible(selectedAircraftIndex);
-                        } else {
+                        } else if (selectedMenuSection == 1) {
                             selectedDifficultyIndex = (selectedDifficultyIndex - 1 + difficulties.length) % difficulties.length;
+                        } else {
+                            selectedMapIndex = (selectedMapIndex - 1 + BattleMap.values().length) % BattleMap.values().length;
                         }
                         repaint();
                     } else if (key == KeyEvent.VK_RIGHT || key == KeyEvent.VK_D) {
                         if (selectedMenuSection == 0) {
                             selectedAircraftIndex = selectedAircraftIndex < 0 ? 0 : (selectedAircraftIndex + 1) % aircraft.length;
                             ensureAircraftVisible(selectedAircraftIndex);
-                        } else {
+                        } else if (selectedMenuSection == 1) {
                             selectedDifficultyIndex = (selectedDifficultyIndex + 1) % difficulties.length;
+                        } else {
+                            selectedMapIndex = (selectedMapIndex + 1) % BattleMap.values().length;
                         }
                         repaint();
                     } else if (key == KeyEvent.VK_1) {
                         if (selectedMenuSection == 0) {
                             selectedAircraftIndex = 0;
                             ensureAircraftVisible(selectedAircraftIndex);
-                        } else {
+                        } else if (selectedMenuSection == 1) {
                             selectedDifficultyIndex = 0;
+                        } else {
+                            selectedMapIndex = 0;
                         }
                         repaint();
                     } else if (key == KeyEvent.VK_2) {
                         if (selectedMenuSection == 0) {
                             selectedAircraftIndex = 1;
                             ensureAircraftVisible(selectedAircraftIndex);
-                        } else {
+                        } else if (selectedMenuSection == 1) {
                             selectedDifficultyIndex = 1;
+                        } else if (BattleMap.values().length > 1) {
+                            selectedMapIndex = 1;
                         }
                         repaint();
                     } else if (key == KeyEvent.VK_3) {
@@ -3538,17 +4960,25 @@ public class JetBattleGame {
                             ensureAircraftVisible(selectedAircraftIndex);
                         } else if (selectedMenuSection == 1) {
                             selectedDifficultyIndex = 2;
+                        } else if (selectedMenuSection == 2 && BattleMap.values().length > 2) {
+                            selectedMapIndex = 2;
                         }
                         repaint();
                     } else if (key == KeyEvent.VK_4 && selectedMenuSection == 0 && aircraft.length > 3) {
                         selectedAircraftIndex = 3;
                         ensureAircraftVisible(selectedAircraftIndex);
                         repaint();
+                    } else if (key == KeyEvent.VK_4 && selectedMenuSection == 2 && BattleMap.values().length > 3) {
+                        selectedMapIndex = 3;
+                        repaint();
                     } else if (key == KeyEvent.VK_ENTER) {
                         if (selectedMenuSection == 0) {
                             aircraftMenuOpen = !aircraftMenuOpen;
-                        } else {
+                        } else if (selectedMenuSection == 1) {
                             difficultyMenuOpen = !difficultyMenuOpen;
+                        } else {
+                            showingMapSelection = true;
+                            previewMapIndex = selectedMapIndex;
                         }
                         repaint();
                     } else if (key == KeyEvent.VK_ENTER || key == KeyEvent.VK_SPACE) {
@@ -3740,35 +5170,137 @@ public class JetBattleGame {
     }
 
     private enum Difficulty {
-        EASY("Easy", "简单", 570, 115, 1050),
-        MEDIUM("Medium", "中等", 720, 145, 780),
-        HARD("Hard", "困难", 870, 190, 560);
+        EASY("Easy", "简单", 0.85, 0.88, 1.25),
+        MEDIUM("Medium", "中等", 1.0, 1.0, 1.0),
+        HARD("Hard", "困难", 1.15, 1.12, 0.90);
 
         private final String name;
         private final String zhName;
-        private final int aiAttack;
-        private final int aiSpeed;
-        private final int aiAttackInterval;
+        private final double attackMultiplier;
+        private final double speedMultiplier;
+        private final double intervalMultiplier;
 
-        Difficulty(String name, String zhName, int aiAttack, int aiSpeed, int aiAttackInterval) {
+        Difficulty(String name, String zhName, double attackMultiplier, double speedMultiplier, double intervalMultiplier) {
             this.name = name;
             this.zhName = zhName;
-            this.aiAttack = aiAttack;
-            this.aiSpeed = aiSpeed;
-            this.aiAttackInterval = aiAttackInterval;
+            this.attackMultiplier = attackMultiplier;
+            this.speedMultiplier = speedMultiplier;
+            this.intervalMultiplier = intervalMultiplier;
         }
 
         private String displayName(boolean chinese) {
             return chinese ? zhName : name;
         }
 
+        private int adjustAttack(int baseAttack) {
+            return Math.max(1, (int) Math.round(baseAttack * attackMultiplier));
+        }
+
+        private int adjustSpeed(int baseSpeed) {
+            return Math.max(1, (int) Math.round(baseSpeed * speedMultiplier));
+        }
+
+        private int adjustAttackInterval(int baseInterval) {
+            return Math.max(1, (int) Math.round(baseInterval * intervalMultiplier));
+        }
+
+        private String formatMultiplier(double multiplier) {
+            return String.format(Locale.US, "%.2f", multiplier);
+        }
+    }
+
+    private enum BattleMap {
+        ORBITAL_DOCK("Orbital Dock", "轨道船坞", "map-orbital-dock.png",
+                "Balanced open arena",
+                "开放式标准战场",
+                new Color(25, 29, 37), new Color(118, 226, 255),
+                new String[]{
+                        "Standard training dock with clear sight lines.",
+                        "Best for testing aircraft damage and movement."
+                },
+                new String[]{
+                        "标准训练船坞，视野清晰，适合正面对抗。",
+                        "用于测试战机伤害、速度和技能手感。"
+                }),
+        NEBULA_RIFT("Nebula Rift", "星云裂隙", "map-nebula-rift.png",
+                "High contrast deep-space field",
+                "高对比度深空战场",
+                new Color(17, 19, 35), new Color(226, 127, 255),
+                new String[]{
+                        "A violet rift cuts across the center lane.",
+                        "Projectiles remain easy to read against the dark field."
+                },
+                new String[]{
+                        "紫色裂隙横贯中心航道，画面更有速度感。",
+                        "深色背景能让弹药和激光轨迹更清晰。"
+                }),
+        CRYSTAL_FIELD("Crystal Field", "晶体星域", "map-crystal-field.png",
+                "Cold blue tactical space",
+                "冷色调战术星域",
+                new Color(14, 31, 39), new Color(150, 242, 255),
+                new String[]{
+                        "Scattered crystal structures create a sharp sci-fi tone.",
+                        "The arena remains mechanically identical to other maps."
+                },
+                new String[]{
+                        "散布的晶体结构强化科幻感和空间层次。",
+                        "地图只改变视觉表现，不改变碰撞和数值。"
+                }),
+        SOLAR_RELIC("Solar Relic", "恒星遗迹", "map-solar-relic.png",
+                "Warm relic battlefield",
+                "暖色恒星遗迹",
+                new Color(29, 24, 22), new Color(255, 196, 77),
+                new String[]{
+                        "Ancient orbital rings glow under a nearby star.",
+                        "Warm lighting gives gold and red aircraft stronger presence."
+                },
+                new String[]{
+                        "古代轨道环在恒星光照下发亮，氛围更厚重。",
+                        "暖色光照会让金色与红色战机更突出。"
+                });
+
+        private final String name;
+        private final String zhName;
+        private final String imageFile;
+        private final String tagline;
+        private final String zhTagline;
+        private final Color background;
+        private final Color accent;
+        private final String[] details;
+        private final String[] zhDetails;
+
+        BattleMap(String name, String zhName, String imageFile, String tagline, String zhTagline,
+                  Color background, Color accent, String[] details, String[] zhDetails) {
+            this.name = name;
+            this.zhName = zhName;
+            this.imageFile = imageFile;
+            this.tagline = tagline;
+            this.zhTagline = zhTagline;
+            this.background = background;
+            this.accent = accent;
+            this.details = details;
+            this.zhDetails = zhDetails;
+        }
+
+        private String displayName(boolean chinese) {
+            return chinese ? zhName : name;
+        }
+
+        private String tagline(boolean chinese) {
+            return chinese ? zhTagline : tagline;
+        }
+
+        private String[] details(boolean chinese) {
+            return chinese ? zhDetails : details;
+        }
     }
 
     private enum Aircraft {
-        TAIL_FLAME("Tail Flame", "尾焰", "tail-flame.png", new Color(210, 65, 62), 720, 400, 18000, 1.4, 145),
-        BLUE_GLOW("Blue Glow", "蓝光", "blue-glow.png", new Color(70, 133, 232), 960, 200, 19000, 1.55, 155),
-        NEUTRON_STAR("Neutron Star", "中子星", "neutron-star.png", new Color(150, 85, 225), 700, 460, 22000, 1.5, 135),
-        VENUS("Venus", "金星", "venus.png", new Color(232, 181, 52), 820, 300, 18500, 1.3, 148);
+        TAIL_FLAME("Tail Flame", "尾焰", "tail-flame.png", new Color(210, 65, 62), 720, 400, 18000, 1.4, 188),
+        BLUE_GLOW("Blue Glow", "蓝光", "blue-glow.png", new Color(70, 133, 232), 960, 200, 19000, 1.55, 202),
+        NEUTRON_STAR("Neutron Star", "中子星", "neutron-star.png", new Color(150, 85, 225), 700, 460, 22000, 1.5, 176),
+        VENUS("Venus", "金星", "venus.png", new Color(232, 181, 52), 820, 300, 18500, 1.3, 192),
+        SIX_WINGED_ANGEL("Six-Winged Angel", "六翼天使", "six-winged-angel.png", new Color(255, 136, 190), 680, 260, 18000, 1.2, 196);
 
         private final String name;
         private final String zhName;
@@ -3802,6 +5334,7 @@ public class JetBattleGame {
                 case BLUE_GLOW -> chinese ? "双翼弹药" : "Twin wing shots";
                 case NEUTRON_STAR -> chinese ? "紫色非连续激光光球" : "Purple non-continuous laser orb";
                 case VENUS -> chinese ? "机头长条激光" : "Nose laser bar";
+                case SIX_WINGED_ANGEL -> chinese ? "圣辉子弹" : "Holy rounds";
             };
         }
 
@@ -3811,6 +5344,7 @@ public class JetBattleGame {
                 case BLUE_GLOW -> chinese ? "连续型蓝色激光" : "Continuous blue laser";
                 case NEUTRON_STAR -> chinese ? "慢速奇点光球" : "Slow singularity orb";
                 case VENUS -> chinese ? "星门强化装甲" : "Star-gate reinforced armor";
+                case SIX_WINGED_ANGEL -> chinese ? "治疗与压制光环" : "Healing and suppression field";
             };
         }
 
@@ -3820,23 +5354,27 @@ public class JetBattleGame {
                 case BLUE_GLOW -> chinese ? "定位：高速持续火力压制机" : "ROLE: High-speed sustained-fire fighter";
                 case NEUTRON_STAR -> chinese ? "定位：重装奇点控制机" : "ROLE: Armored singularity controller";
                 case VENUS -> chinese ? "定位：均衡型装甲强化战机" : "ROLE: Balanced armor-enhancement fighter";
+                case SIX_WINGED_ANGEL -> chinese ? "定位：续航辅助与区域压制战机" : "ROLE: Sustain support and area-control fighter";
             };
         }
 
         private String[] normalDetails(boolean chinese) {
             return switch (this) {
                 case TAIL_FLAME -> chinese
-                        ? new String[]{"每 700ms 发射一枚追踪导弹", "伤害按攻击减去目标防御结算"}
-                        : new String[]{"Homing missile every 700 ms", "Damage: ATK minus target DEF"};
+                        ? new String[]{"每 700ms 发射一枚追踪导弹", "加速时会在身后留下短时火痕", "敌机穿过火痕会受到持续灼烧"}
+                        : new String[]{"Homing missile every 700 ms", "Boosting leaves short-lived flame trails", "Enemies crossing trails take burn damage"};
                 case BLUE_GLOW -> chinese
-                        ? new String[]{"双翼齐射，单点间隔 400ms", "按 C 切换四连发压制模式"}
-                        : new String[]{"Twin-wing volley every 400 ms", "Press C for four-shot burst mode"};
+                        ? new String[]{"双翼齐射，单点间隔 400ms", "命中会叠加离子共振", "三层共振会短暂干扰敌方推进"}
+                        : new String[]{"Twin-wing volley every 400 ms", "Hits stack ion resonance", "Three stacks briefly disrupt enemy boost"};
                 case NEUTRON_STAR -> chinese
                         ? new String[]{"每 600ms 发射非连续激光球", "偏转弹药回复基础回能的 20%"}
                         : new String[]{"Laser orb every 600 ms", "Deflections restore 20% base hit charge"};
                 case VENUS -> chinese
-                        ? new String[]{"机头高速激光伤害小幅降低", "强化双炮更快且可穿透目标"}
-                        : new String[]{"Faster nose laser with slightly less damage", "Twin beams fly faster and pierce targets"};
+                        ? new String[]{"机头高速激光伤害小幅降低", "普通命中生成环绕星尘护片", "护片可抵消下一次部分伤害"}
+                        : new String[]{"Faster nose laser with slightly less damage", "Normal hits create orbiting star shards", "Shards absorb part of the next hit"};
+                case SIX_WINGED_ANGEL -> chinese
+                        ? new String[]{"每 600ms 从机头发射圣辉子弹", "属于子弹类弹药，基础伤害偏低但飞行速度较快"}
+                        : new String[]{"Holy bullet round every 600 ms", "Bullet-type ammo with lower damage but fast travel"};
             };
         }
 
@@ -3854,23 +5392,29 @@ public class JetBattleGame {
                 case VENUS -> chinese
                         ? new String[]{"星门缓慢组装强化装甲 6.5 秒", "提升攻防速度并获得 1600 装甲"}
                         : new String[]{"Star gate assembles armor for 6.5 seconds", "Boosts ATK/DEF/SPD and grants 1600 armor"};
+                case SIX_WINGED_ANGEL -> chinese
+                        ? new String[]{"在光标位置展开 7 秒治疗圈", "己方在圈内回血并加速，敌方在圈内大幅减速并降低防御", "被动血包可恢复生命和能量，12 秒未拾取会消失"}
+                        : new String[]{"Creates a 7-second healing field at cursor", "Friendly fighter heals and accelerates; enemy is heavily slowed and loses DEF", "Passive heart packs restore HP and energy, expiring after 12 seconds"};
             };
         }
 
         private String[] combatTips(boolean chinese) {
             return switch (this) {
                 case TAIL_FLAME -> chinese
-                        ? new String[]{"保持中距离，让导弹完成追踪", "利用高防御稳定换血并蓄能"}
-                        : new String[]{"Keep range so missiles can track", "Use high DEF for steady trades"};
+                        ? new String[]{"用加速转向把火痕铺在敌方路线", "导弹逼走位，火痕惩罚追击"}
+                        : new String[]{"Lay flame trails across enemy routes", "Missiles force movement; trails punish pursuit"};
                 case BLUE_GLOW -> chinese
-                        ? new String[]{"利用 155 速度持续走位压制", "单点稳定，连发适合快速压血"}
-                        : new String[]{"Use 155 SPD to maintain pressure", "Single is steady; burst applies pressure"};
+                        ? new String[]{"持续命中比单发爆发更重要", "共振触发后抓住敌方无法加速的窗口"}
+                        : new String[]{"Sustained hits matter more than burst", "Use ion-lock windows to chase or reposition"};
                 case NEUTRON_STAR -> chinese
                         ? new String[]{"预判敌方路线释放奇点光球", "控制战场中心并干扰敌方火力"}
                         : new String[]{"Lead targets with the singularity orb", "Control center and disrupt enemy fire"};
                 case VENUS -> chinese
-                        ? new String[]{"技能前稳步换血并积攒充能", "装甲期间主动压制并保持命中"}
-                        : new String[]{"Trade steadily while charging skill", "Press the attack while armor is active"};
+                        ? new String[]{"普通命中积累护片后再主动换血", "强化期间用穿透双炮保持压制"}
+                        : new String[]{"Build shards with normal hits before trading", "Use piercing cannons to press during armor"};
+                case SIX_WINGED_ANGEL -> chinese
+                        ? new String[]{"把治疗圈放在自己移动路线或敌我交战点", "及时回收血包，不要让它自然消失"}
+                        : new String[]{"Place fields on your route or contested space", "Collect hearts before they expire"};
             };
         }
     }
@@ -3945,6 +5489,15 @@ public class JetBattleGame {
         private double venusGateRemaining;
         private double venusArmorRemaining;
         private int venusArmorHp;
+        private int venusShardCount;
+        private int blueGlowResonanceStacks;
+        private double blueGlowResonanceRemaining;
+        private double blueGlowIonLockRemaining;
+        private double tailFlameTrailCooldown;
+        private double seraphSpeedBuffRemaining;
+        private double seraphSpeedDebuffRemaining;
+        private double seraphDefenseDebuffRemaining;
+        private double healCarry;
         private double boostEnergy;
         private double boostRecoverDelay;
         private boolean boosting;
@@ -3982,6 +5535,15 @@ public class JetBattleGame {
             venusGateRemaining = 0;
             venusArmorRemaining = 0;
             venusArmorHp = 0;
+            venusShardCount = 0;
+            blueGlowResonanceStacks = 0;
+            blueGlowResonanceRemaining = 0;
+            blueGlowIonLockRemaining = 0;
+            tailFlameTrailCooldown = 0;
+            seraphSpeedBuffRemaining = 0;
+            seraphSpeedDebuffRemaining = 0;
+            seraphDefenseDebuffRemaining = 0;
+            healCarry = 0;
             boostEnergy = BattlePanel.BOOST_MAX_ENERGY;
             boostRecoverDelay = 0;
             boosting = false;
@@ -4094,6 +5656,120 @@ public class JetBattleGame {
         }
     }
 
+    private static final class SeraphZone {
+        private final boolean fromBlue;
+        private final double x;
+        private final double y;
+        private final double radius;
+        private double remaining;
+
+        SeraphZone(boolean fromBlue, double x, double y, double radius, double duration) {
+            this.fromBlue = fromBlue;
+            this.x = x;
+            this.y = y;
+            this.radius = radius;
+            this.remaining = duration;
+        }
+
+        private boolean contains(Fighter fighter) {
+            return Math.hypot(fighter.x - x, fighter.y - y) <= radius;
+        }
+    }
+
+    private static final class FlameTrail {
+        private final boolean fromBlue;
+        private final double x;
+        private final double y;
+        private double remaining = BattlePanel.TAIL_FLAME_TRAIL_DURATION;
+        private double damageCarry;
+
+        FlameTrail(boolean fromBlue, double x, double y) {
+            this.fromBlue = fromBlue;
+            this.x = x;
+            this.y = y;
+        }
+
+        private void draw(Graphics2D g) {
+            double ratio = Math.max(0, remaining / BattlePanel.TAIL_FLAME_TRAIL_DURATION);
+            int radius = (int) Math.round(BattlePanel.TAIL_FLAME_TRAIL_RADIUS * (0.65 + 0.35 * ratio));
+            int alpha = (int) Math.round(170 * ratio);
+            int cx = (int) Math.round(x);
+            int cy = (int) Math.round(y);
+            long now = System.currentTimeMillis();
+            RadialGradientPaint heat = new RadialGradientPaint(
+                    (float) x,
+                    (float) y,
+                    radius,
+                    new float[]{0f, 0.48f, 1f},
+                    new Color[]{
+                            new Color(255, 241, 184, Math.max(0, alpha)),
+                            new Color(255, 116, 38, Math.max(0, (int) (alpha * 0.68))),
+                            new Color(112, 24, 12, 0)
+                    }
+            );
+            g.setPaint(heat);
+            g.fillOval(cx - radius, cy - radius, radius * 2, radius * 2);
+            g.setStroke(new BasicStroke(2.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            for (int i = 0; i < 4; i++) {
+                double wave = Math.sin(now / 120.0 + x * 0.03 + i * 1.7);
+                int w = (int) Math.round(radius * (0.72 + i * 0.18));
+                int h = (int) Math.round(radius * (0.42 + i * 0.10));
+                int ox = (int) Math.round(Math.cos(i * 2.1 + now / 260.0) * 5);
+                int oy = (int) Math.round(Math.sin(i * 1.5 + now / 230.0) * 4);
+                g.setColor(new Color(255, i % 2 == 0 ? 188 : 86, 34, Math.max(0, (int) (alpha * (0.58 - i * 0.08)))));
+                g.drawArc(cx - w / 2 + ox, cy - h / 2 + oy, w, h, (int) (wave * 45 + i * 72), 95);
+            }
+            g.setColor(new Color(255, 244, 204, Math.max(0, (int) (alpha * 0.72))));
+            g.fillOval(cx - radius / 5, cy - radius / 5, Math.max(3, radius / 3), Math.max(3, radius / 3));
+        }
+    }
+
+    private static final class HeartPickup {
+        private final boolean fromBlue;
+        private final double x;
+        private final double y;
+        private final double duration;
+        private double remaining;
+
+        HeartPickup(boolean fromBlue, double x, double y, double duration) {
+            this.fromBlue = fromBlue;
+            this.x = x;
+            this.y = y;
+            this.duration = duration;
+            this.remaining = duration;
+        }
+
+        private boolean isPickedBy(Fighter fighter) {
+            return Math.hypot(fighter.x - x, fighter.y - y) <= BattlePanel.SERAPH_HEART_PICKUP_RADIUS;
+        }
+
+        private void draw(Graphics2D g, BufferedImage image) {
+            double ratio = Math.max(0, remaining / duration);
+            int alpha = (int) Math.round(230 * ratio);
+            int cx = (int) Math.round(x);
+            int cy = (int) Math.round(y);
+            g.setColor(new Color(255, 128, 154, Math.max(0, (int) Math.round(46 * ratio))));
+            g.fillOval(cx - 25, cy - 25, 50, 50);
+            g.setStroke(new BasicStroke(1.4f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            g.setColor(fromBlue
+                    ? new Color(124, 225, 255, Math.max(0, (int) Math.round(135 * ratio)))
+                    : new Color(255, 140, 155, Math.max(0, (int) Math.round(135 * ratio))));
+            g.drawOval(cx - 23, cy - 23, 46, 46);
+            if (image == null) {
+                BattlePanel.drawWingedHeartIcon(g, x, y, 0.82, alpha);
+                return;
+            }
+            double scale = Math.min(42.0 / image.getWidth(), 28.0 / image.getHeight());
+            int drawWidth = Math.max(1, (int) Math.round(image.getWidth() * scale));
+            int drawHeight = Math.max(1, (int) Math.round(image.getHeight() * scale));
+            Graphics2D icon = (Graphics2D) g.create();
+            icon.setComposite(java.awt.AlphaComposite.getInstance(java.awt.AlphaComposite.SRC_OVER, Math.max(0, Math.min(255, alpha)) / 255f));
+            icon.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+            icon.drawImage(image, cx - drawWidth / 2, cy - drawHeight / 2, drawWidth, drawHeight, null);
+            icon.dispose();
+        }
+    }
+
     private static final class FloatingText {
         private final String value;
         private final double x;
@@ -4139,6 +5815,7 @@ public class JetBattleGame {
         private boolean homing;
         private double homingStrength;
         private Fighter homingTarget;
+        private double homingTimeout;
         private final boolean fromBlue;
         private final Color color;
         private final String hitMessage;
@@ -4150,13 +5827,18 @@ public class JetBattleGame {
         private boolean neutronImpactStarted;
         private boolean venusLaserBar;
         private boolean venusEnhancedLaser;
+        private boolean seraphBullet;
         private boolean piercing;
         private boolean targetHit;
         private Fighter neutronOwner;
+        private Fighter neutronDeflectOwner;
         private AmmoType neutronResolvedType;
         private double neutronFlightRemaining;
         private double neutronPullRemaining;
         private double neutronDamageCarry;
+        private double neutronOrbitPhase;
+        private double neutronOrbitDirection = 1;
+        private double neutronOrbitBias;
         private double x;
         private double y;
 
@@ -4195,6 +5877,15 @@ public class JetBattleGame {
                 }
             }
 
+            if (homingTimeout > 0) {
+                homingTimeout = Math.max(0, homingTimeout - seconds);
+                if (homingTimeout == 0) {
+                    homing = false;
+                    homingTarget = null;
+                    homingStrength = 0;
+                }
+            }
+
             if (homing && homingTarget != null) {
                 double targetDx = homingTarget.x - x;
                 double targetDy = homingTarget.y - y;
@@ -4223,6 +5914,8 @@ public class JetBattleGame {
                 drawNeutronSkillOrb(g);
             } else if (venusLaserBar) {
                 drawVenusLaserBar(g);
+            } else if (seraphBullet) {
+                drawSeraphBullet(g);
             } else if (ammoType == AmmoType.LASER && laserType == LaserType.NON_CONTINUOUS && !missile) {
                 drawEnergyOrb(g);
             } else if (missile) {
@@ -4262,8 +5955,6 @@ public class JetBattleGame {
             neutronResolvedType = resolvedType;
             vx = 0;
             vy = 0;
-            x = target.x;
-            y = target.y;
         }
 
         private void removeSpecialEffects() {
@@ -4295,7 +5986,27 @@ public class JetBattleGame {
         }
 
         private void drawNeutronSkillOrb(Graphics2D g) {
-            int r = (int) Math.round(neutronImpactStarted ? radius + 18 : radius + 10);
+            int influenceRadius = (int) Math.round(BattlePanel.NEUTRON_ORB_DEFLECT_RADIUS);
+            long now = System.currentTimeMillis();
+            double pulse = (Math.sin(now / 260.0) + 1.0) * 0.5;
+            g.setColor(new Color(color.getRed(), color.getGreen(), color.getBlue(), 26));
+            g.fillOval((int) Math.round(x - influenceRadius), (int) Math.round(y - influenceRadius),
+                    influenceRadius * 2, influenceRadius * 2);
+            g.setStroke(new BasicStroke(1.4f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            for (int i = 0; i < 3; i++) {
+                int ring = (int) Math.round(influenceRadius * (0.42 + i * 0.22 + pulse * 0.045));
+                g.setColor(new Color(210, 174, 255, 44 - i * 8));
+                g.drawOval((int) Math.round(x - ring), (int) Math.round(y - ring), ring * 2, ring * 2);
+            }
+            g.setColor(new Color(238, 218, 255, 82));
+            for (int i = 0; i < 4; i++) {
+                int arcRadius = (int) Math.round(influenceRadius * (0.52 + i * 0.1));
+                int start = (int) Math.round(now / 18.0 + i * 73);
+                g.drawArc((int) Math.round(x - arcRadius), (int) Math.round(y - arcRadius),
+                        arcRadius * 2, arcRadius * 2, start, 58);
+            }
+
+            int r = (int) Math.round(neutronImpactStarted ? radius + 26 : radius + 16);
             RadialGradientPaint paint = new RadialGradientPaint(
                     (float) x,
                     (float) y,
@@ -4314,6 +6025,46 @@ public class JetBattleGame {
             g.setStroke(new BasicStroke(2.4f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
             g.drawArc((int) x - r, (int) y - r, r * 2, r * 2, 25, 115);
             g.drawArc((int) x - r, (int) y - r, r * 2, r * 2, 205, 115);
+        }
+
+        private void drawSeraphBullet(Graphics2D g) {
+            double length = Math.hypot(vx, vy);
+            if (length == 0) {
+                return;
+            }
+            double nx = vx / length;
+            double ny = vy / length;
+            double sideX = -ny;
+            double sideY = nx;
+            double tailX = x - nx * 26;
+            double tailY = y - ny * 26;
+
+            g.setColor(new Color(255, 118, 146, 80));
+            g.setStroke(new BasicStroke(8f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            g.drawLine((int) Math.round(tailX), (int) Math.round(tailY), (int) Math.round(x), (int) Math.round(y));
+            g.setColor(new Color(255, 245, 250, 205));
+            g.setStroke(new BasicStroke(3.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            g.drawLine((int) Math.round(x - nx * 16), (int) Math.round(y - ny * 16), (int) Math.round(x), (int) Math.round(y));
+
+            int[] xs = {
+                    (int) Math.round(x + nx * 11),
+                    (int) Math.round(x - nx * 8 + sideX * 7),
+                    (int) Math.round(x - nx * 3),
+                    (int) Math.round(x - nx * 8 - sideX * 7)
+            };
+            int[] ys = {
+                    (int) Math.round(y + ny * 11),
+                    (int) Math.round(y - ny * 8 + sideY * 7),
+                    (int) Math.round(y - ny * 3),
+                    (int) Math.round(y - ny * 8 - sideY * 7)
+            };
+            g.setColor(new Color(255, 255, 255, 235));
+            g.fillPolygon(xs, ys, xs.length);
+            g.setColor(new Color(255, 82, 118, 220));
+            g.setStroke(new BasicStroke(1.4f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            g.drawPolygon(xs, ys, xs.length);
+            g.setColor(new Color(255, 112, 142, 180));
+            g.fillOval((int) Math.round(x - nx * 7 - 3), (int) Math.round(y - ny * 7 - 3), 6, 6);
         }
 
         private void drawBeam(Graphics2D g) {
